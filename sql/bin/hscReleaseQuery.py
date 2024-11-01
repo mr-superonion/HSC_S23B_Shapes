@@ -17,7 +17,6 @@ version = 20190924.1
 vv = "-galaxy"
 release_year = "s23b"
 release_version = "dr4"
-tractname = "tracts.csv"
 prefix = "database/%s%s/tracts" % (release_year, vv)
 api_url = "https://hscdata.mtk.nao.ac.jp/datasearch/api/catalog_jobs/"
 
@@ -42,6 +41,9 @@ def main():
     parser.add_argument(
         "--user", "-u", required=True, help="specify your STARS account"
     )
+    parser.add_argument(
+        "--tracts", "-t", required=True, help="specify tract list"
+    )
     hsc_obj = HscQuery(parser=parser)
     hsc_obj.run()
     return
@@ -55,9 +57,10 @@ class HscQuery():
             "account_name": args.user,
             "password": get_password(),
         }
+        self.tractname = args.tracts
 
     def run(self):
-        tracts = ascii.read(tractname)["tract"]
+        tracts = ascii.read(self.tractname)["tract"]
         for tt in tracts:
             print("Tract: %s" % tt)
             self.download_tract(tt)

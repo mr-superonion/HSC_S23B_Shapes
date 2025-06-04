@@ -70,8 +70,10 @@ def process_patch(entry, skymap, task):
         star_mask_array=bmask,
     )
     catalog = task.anacal.run(**data)
+    sel = catalog["is_primary"]
     del data, exposure, wcs, bbox, bmask
-    fitsio.write(out_fname, catalog)
+    fitsio.write(out_fname, catalog[sel])
+    del catalog, sel
     return
 
 

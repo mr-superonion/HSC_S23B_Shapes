@@ -16,6 +16,26 @@ SELECT
 , meas.i_cmodel_fluxerr
 , meas.i_cmodel_objective
 
+, meas.g_cmodel_mag
+, meas.g_cmodel_magerr
+, meas.g_cmodel_flag
+
+, meas.r_cmodel_mag
+, meas.r_cmodel_magerr
+, meas.r_cmodel_flag
+
+, meas.z_cmodel_mag
+, meas.z_cmodel_magerr
+, meas.z_cmodel_flag
+
+, meas.y_cmodel_mag
+, meas.y_cmodel_magerr
+, meas.y_cmodel_flag
+
+, meas2.i_sdssshape_shape11
+, meas2.i_sdssshape_shape22
+, meas2.i_sdssshape_shape12
+
 -- forced measurement
 , forced.a_g
 , forced.a_r
@@ -81,9 +101,6 @@ SELECT
 -- Mask plane
 , meas.i_pixelflags_inexact_psfcenter
 , meas.i_pixelflags_inexact_psf
-
-, meas2.i_psfflux_mag
-, meas2.i_psfflux_magerr
 
 , meas4.g_convolvedflux_2_15_mag
 , meas4.r_convolvedflux_2_15_mag

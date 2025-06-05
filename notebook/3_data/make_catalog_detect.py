@@ -59,7 +59,10 @@ def process_patch(entry, skymap, task):
     exposure = afwImage.ExposureF.readFits(fname)
     mask_dir = f"{bdir}/s23b-brightStarMask/tracts_mask/{tract_id}/{patch_id}"
     mask_fname = os.path.join(mask_dir, "mask.fits")
-    bmask = fitsio.read(mask_fname)
+    if os.path.isfile(mask_fname):
+        bmask = fitsio.read(mask_fname)
+    else:
+        bmask = None
 
     sp_dir = f"{bdir}/s23b-brightGalaxyMask/tracts/{tract_id}/{patch_id}"
     sp_fname = os.path.join(sp_dir, "catalog.fits")
@@ -83,9 +86,15 @@ def process_patch(entry, skymap, task):
     )
     catalog = task.anacal.run(**data)
     sel = (catalog["is_primary"]) & (catalog["mask_value"] < 30)
-    del data, exposure, wcs, bbox, bmask
-    fitsio.write(out_fname, catalog[sel])
+    catalog = catalog[sel]
+    del data, exposure, wcs, bbox
+    if len(catalog) > 10:
+        fitsio.write(out_fname, catalog)
     del catalog, sel
+    if bmask is not None:
+        del bmask
+    if spg is not None:
+        del spg
     return
 
 

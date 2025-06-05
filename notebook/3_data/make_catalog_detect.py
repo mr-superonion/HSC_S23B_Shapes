@@ -4,10 +4,11 @@ import argparse
 import gc
 import glob
 import os
+from tqdm import tqdm
 
 import fitsio
 import lsst.afw.image as afwImage
-from lsst.daf.butler import Butler
+from lsst.skymap.ringsSkyMap import RingsSkyMap, RingsSkyMapConfig
 from mpi4py import MPI
 from xlens.process_pipe.anacal_detect import (AnacalDetectPipe,
                                               AnacalDetectPipeConfig)
@@ -43,7 +44,6 @@ def process_patch(entry, skymap, task):
     out_fname = os.path.join(outdir, "detect.fits")
     if os.path.isfile(out_fname):
         return
-    os.makedirs(outdir, exist_ok=True)
 
     patch_info = skymap[tract_id][patch_id]
     wcs = patch_info.getWcs()
@@ -84,11 +84,15 @@ def process_patch(entry, skymap, task):
         star_mask_array=bmask,
         star_cat=spg,
     )
+    if data is None:
+        return
     catalog = task.anacal.run(**data)
     sel = (catalog["is_primary"]) & (catalog["mask_value"] < 30)
     catalog = catalog[sel]
     del data, exposure, wcs, bbox
     if len(catalog) > 10:
+        if not os.path.isdir(outdir):
+            os.makedirs(outdir, exist_ok=True)
         fitsio.write(out_fname, catalog)
     del catalog, sel
     if bmask is not None:
@@ -116,11 +120,14 @@ def main():
     selected = comm.bcast(selected, root=0)
     my_entries = split_work(selected, size, rank)
 
-    obs_repo = "/lustre/work/xiangchong.li/work/hsc_s23b_sim"
-    obs_collection = "version1/image"
-    skymap_name = "hsc"
-    obs_butler = Butler(obs_repo, collections=obs_collection)
-    skymap = obs_butler.get("skyMap", skymap=skymap_name)
+    # Set up the configuration
+    config = RingsSkyMapConfig()
+    config.numRings = 120
+    config.projection = "TAN"
+    config.tractOverlap = 1.0 / 60  # degrees
+    config.pixelScale = 0.168       # arcsec/pixel
+    skymap = RingsSkyMap(config)
+
     config = AnacalDetectPipeConfig()
     config.anacal.force_size = False
     config.anacal.num_epochs = 8
@@ -140,9 +147,17 @@ def main():
         "VIGNETTED",
     ]
     task = AnacalDetectPipe(config=config)
+
+
+    # Initialize tqdm progress bar for this rank
+    pbar = tqdm(total=len(my_entries), desc=f"Rank {rank}", position=rank)
     for entry in my_entries:
         process_patch(entry, skymap, task)
         gc.collect()
+        pbar.update(1)
+
+    pbar.close()
+    return
 
 
 if __name__ == "__main__":

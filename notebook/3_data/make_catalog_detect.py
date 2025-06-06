@@ -33,28 +33,22 @@ def split_work(data, size, rank):
     return data[rank::size]
 
 
-def process_patch(entry, skymap, task):
-    tract_id = entry["tract"]
-    patch_db = entry["patch"]
-    patch_x = patch_db // 100
-    patch_y = patch_db % 100
-    patch_id = patch_x + patch_y * 9
+def read_files(tract_id, patch_id):
     bdir = "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/database/"
     outdir = f"{bdir}/s23b-anacal/tracts/{tract_id}/{patch_id}"
     out_fname = os.path.join(outdir, "detect.fits")
     if os.path.isfile(out_fname):
-        return
+        return None
 
-    patch_info = skymap[tract_id][patch_id]
-    wcs = patch_info.getWcs()
-    bbox = patch_info.getOuterBBox()
+    bdir = "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/database/"
     image_dir = (
         "/lustre/HSC_DR/hsc_ssp/dr4/s23b/data/s23b_wide/unified/deepCoadd_calexp"
     )
     files = glob.glob(os.path.join(image_dir, f"{tract_id}/{patch_id}/i/*"))
     if not files:
         print(os.path.join(image_dir, f"{tract_id}/{patch_id}/i/*"))
-        return
+        return None
+
     fname = files[0]
     exposure = afwImage.ExposureF.readFits(fname)
     mask_dir = f"{bdir}/s23b-brightStarMask/tracts_mask/{tract_id}/{patch_id}"
@@ -70,35 +64,71 @@ def process_patch(entry, skymap, task):
         spg = fitsio.read(sp_fname)
     else:
         spg = None
+    return {
+        "exposure": exposure,
+        "bmask": bmask,
+        "spg": spg,
+    }
 
-    seed = tract_id * 1000 + patch_id
-    data = task.anacal.prepare_data(
-        exposure=exposure,
-        seed=seed,
-        noise_corr=None,
-        detection=None,
-        band=None,
-        skyMap=skymap,
-        tract=tract_id,
-        patch=patch_id,
-        star_mask_array=bmask,
-        star_cat=spg,
-    )
+
+def process_patch(entry, skymap, task, comm):
+    tract_id = entry["tract"]
+    patch_db = entry["patch"]
+    patch_x = patch_db // 100
+    patch_y = patch_db % 100
+    patch_id = patch_x + patch_y * 9
+    bdir = "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/database/"
+    outdir = f"{bdir}/s23b-anacal/tracts/{tract_id}/{patch_id}"
+    out_fname = os.path.join(outdir, "detect.fits")
+
+    patch_info = skymap[tract_id][patch_id]
+    wcs = patch_info.getWcs()
+    bbox = patch_info.getOuterBBox()
+
+    # rank = comm.Get_rank()
+    # size = comm.Get_size()
+    # token = bytearray(1)
+    # if rank != 0:
+    #     comm.Recv(token, source=rank - 1)
+    res = read_files(tract_id, patch_id)
+    # if rank != size - 1:
+    #     comm.Send(token, dest=rank + 1)
+    if res is None:
+        data = None
+    else:
+        seed = tract_id * 1000 + patch_id
+        data = task.anacal.prepare_data(
+            exposure=res["exposure"],
+            seed=seed,
+            noise_corr=None,
+            detection=None,
+            band=None,
+            skyMap=skymap,
+            tract=tract_id,
+            patch=patch_id,
+            star_mask_array=res["bmask"],
+            star_cat=res["spg"],
+        )
     if data is None:
-        return
-    catalog = task.anacal.run(**data)
-    sel = (catalog["is_primary"]) & (catalog["mask_value"] < 30)
-    catalog = catalog[sel]
-    del data, exposure, wcs, bbox
-    if len(catalog) > 10:
-        if not os.path.isdir(outdir):
+        catalog = None
+    else:
+        catalog = task.anacal.run(**data)
+        sel = (catalog["is_primary"]) & (catalog["mask_value"] < 30)
+        catalog = catalog[sel]
+        del sel
+    del data, wcs, bbox, res
+
+    # token = bytearray(1)
+    # if rank != 0:
+    #     comm.Recv(token, source=rank - 1)
+    if catalog is not None:
+        if len(catalog) > 10:
             os.makedirs(outdir, exist_ok=True)
-        fitsio.write(out_fname, catalog)
-    del catalog, sel
-    if bmask is not None:
-        del bmask
-    if spg is not None:
-        del spg
+            fitsio.write(out_fname, catalog)
+    # if rank != size - 1:
+    #     comm.Send(token, dest=rank + 1)
+
+    del catalog
     return
 
 
@@ -113,7 +143,7 @@ def main():
         full = fitsio.read(
             "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/tracts_fdfc_v1_trim2.fits"
         )
-        selected = full[args.start : args.end]
+        selected = full[args.start: args.end]
     else:
         selected = None
 
@@ -148,13 +178,13 @@ def main():
     ]
     task = AnacalDetectPipe(config=config)
 
-
     # Initialize tqdm progress bar for this rank
     pbar = tqdm(total=len(my_entries), desc=f"Rank {rank}", position=rank)
     for entry in my_entries:
-        process_patch(entry, skymap, task)
+        process_patch(entry, skymap, task, comm)
         gc.collect()
         pbar.update(1)
+        # comm.Barrier()  # Wait for all ranks to finish this entry
 
     pbar.close()
     return

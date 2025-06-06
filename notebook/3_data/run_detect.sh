@@ -20,4 +20,4 @@ START=$(((INDEX - 1) * 1650))
 END=$((START + 1650))
 
 echo "Running on $HOSTNAME with START=$START and END=$END"
-mpirun -np 10 ./make_catalog_detect.py --start "$START" --end "$END"
+mpirun -np 28 ./make_catalog_detect.py --start "$START" --end "$END"

@@ -38,6 +38,7 @@ def read_files(tract_id, patch_id):
     outdir = f"{bdir}/s23b-anacal/tracts/{tract_id}/{patch_id}"
     out_fname = os.path.join(outdir, "detect.fits")
     if os.path.isfile(out_fname):
+        print("already has outcome")
         return None
 
     bdir = "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/database/"
@@ -111,6 +112,7 @@ def process_patch(entry, skymap, task, comm):
         )
     if data is None:
         catalog = None
+        print("cannot prepare data")
     else:
         catalog = task.anacal.run(**data)
         sel = (catalog["is_primary"]) & (catalog["mask_value"] < 30)
@@ -125,6 +127,8 @@ def process_patch(entry, skymap, task, comm):
         if len(catalog) > 10:
             os.makedirs(outdir, exist_ok=True)
             fitsio.write(out_fname, catalog)
+        else:
+            print("Do not have enough detection")
     # if rank != size - 1:
     #     comm.Send(token, dest=rank + 1)
 
@@ -141,7 +145,7 @@ def main():
 
     if rank == 0:
         full = fitsio.read(
-            "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/tracts_fdfc_v1_trim2.fits"
+            "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/tracts_fdfc_v1_trim3.fits"
         )
         selected = full[args.start: args.end]
     else:

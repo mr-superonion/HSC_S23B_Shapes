@@ -95,7 +95,7 @@ def main():
 
     if rank == 0:
         full = fitsio.read(
-            "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/tracts_fdfc_v1_trim2.fits"
+            "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/tracts_fdfc_v1_trim3.fits"
         )
         selected = full[args.start : args.end]
     else:

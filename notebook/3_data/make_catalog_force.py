@@ -88,7 +88,6 @@ def process_patch(entry, skymap, task, comm):
     det_fname = os.path.join(outdir, "detect.fits")
     out_fname = os.path.join(outdir, "force.fits")
     if os.path.isfile(out_fname) or (not os.path.isfile(det_fname)):
-        print(out_fname)
         return None
 
     patch_info = skymap[tract_id][patch_id]
@@ -123,6 +122,7 @@ def process_patch(entry, skymap, task, comm):
 
     catalog = rfn.merge_arrays(catalog, flatten=True)
     fitsio.write(out_fname, catalog)
+
     return
 
 

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import argparse
-import glob
 import os
 import numpy as np
 
@@ -35,29 +34,17 @@ def process_patch(entry):
     patch_x = patch_db // 100
     patch_y = patch_db % 100
     patch_id = patch_x + patch_y * 9
-    image_dir = (
-        "/lustre/HSC_DR/hsc_ssp/dr4/s23b/data/s23b_wide/unified/deepCoadd_calexp"
-    )
-    valid = True
-    for bb in ["g", "r", "i", "z", "y"]:
-        files = glob.glob(
-            os.path.join(image_dir, f"{tract_id}/{patch_id}/{bb}/*")
-        )
-        if not files:
-            return False
-        fname = files[0]
-        try:
-            exposure = afwImage.ExposureF.readFits(fname)
-            test = False
-            if exposure.hasPsf():
-                lsst_psf = exposure.getPsf()
-                if lsst_psf is not None:
-                    test = True
-            del exposure
-            valid = valid & test
-        except:
-            valid = False
-    return valid
+    sel = False
+
+    bdir = "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/database/"
+    basedir = f"{bdir}/s23b-anacal/tracts/{tract_id}/{patch_id}"
+    det_fname = os.path.join(basedir, "detect.fits")
+    force_fname = os.path.join(basedir, "force.fits")
+    if not os.path.isfile(force_fname):
+        sel = True
+        if os.path.isfile(det_fname):
+            os.popen(f"rm {det_fname}")
+    return sel
 
 
 def main():

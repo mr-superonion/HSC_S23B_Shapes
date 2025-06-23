@@ -10,8 +10,8 @@ import fitsio
 import lsst.afw.image as afwImage
 from lsst.skymap.ringsSkyMap import RingsSkyMap, RingsSkyMapConfig
 from mpi4py import MPI
-from xlens.process_pipe.anacal_detect import (
-    AnacalDetectPipe, AnacalDetectPipeConfig
+from xlens.process_pipe.fpfs_force import (
+    FpfsForcePipe, FpfsForcePipeConfig
 )
 
 
@@ -40,7 +40,7 @@ def split_work(data, size, rank):
 def read_files(tract_id, patch_id):
     bdir = "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/database/"
     outdir = f"{bdir}/s23b-anacal/tracts/{tract_id}/{patch_id}"
-    out_fname = os.path.join(outdir, "detect.fits")
+    out_fname = os.path.join(outdir, "fpfs.fits")
     if os.path.isfile(out_fname):
         print("already has outcome")
         return None
@@ -51,7 +51,7 @@ def read_files(tract_id, patch_id):
     )
     files = glob.glob(os.path.join(image_dir, f"{tract_id}/{patch_id}/i/*"))
     if not files:
-        print(os.path.join(image_dir, f"{tract_id}/{patch_id}/i/*"))
+        print(f"Canot find image for tract: {tract_id}, patch: {patch_id}")
         return None
 
     fname = files[0]
@@ -62,9 +62,19 @@ def read_files(tract_id, patch_id):
         bmask = fitsio.read(mask_fname)
     else:
         bmask = None
+
+    det_dir = f"{bdir}/s23b-anacal/tracts/{tract_id}/{patch_id}"
+    det_fname = os.path.join(det_dir, "detect.fits")
+    if os.path.isfile(mask_fname):
+        detection = fitsio.read(det_fname)
+    else:
+        print(f"cannot find {det_fname}")
+        return None
+
     return {
         "exposure": exposure,
         "mask": bmask,
+        "detection": detection,
     }
 
 
@@ -76,46 +86,33 @@ def process_patch(entry, skymap, task, comm, noise_corr):
     patch_id = patch_x + patch_y * 9
     bdir = "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/database/"
     outdir = f"{bdir}/s23b-anacal/tracts/{tract_id}/{patch_id}"
-    out_fname = os.path.join(outdir, "detect.fits")
+    out_fname = os.path.join(outdir, "fpfs.fits")
 
     patch_info = skymap[tract_id][patch_id]
     wcs = patch_info.getWcs()
     bbox = patch_info.getOuterBBox()
-
     res = read_files(tract_id, patch_id)
-    if res is None:
-        data = None
-    else:
+    del wcs, bbox, patch_info
+
+    if res is not None:
         seed = (tract_id * 1000 + patch_id) * 5
-        data = task.anacal.prepare_data(
+        data = task.fpfs.prepare_data(
             exposure=res["exposure"],
             seed=seed,
             noise_corr=noise_corr,
-            detection=None,
+            detection=res["detection"],
             band=None,
-            skyMap=skymap,
-            tract=tract_id,
-            patch=patch_id,
             mask_array=res["mask"],
         )
-    if data is None:
-        catalog = None
-        print(tract_id, patch_id, "cannot prepare data")
+        catalog = task.fpfs.run(**data)
+        del data, res
+        os.makedirs(outdir, exist_ok=True)
+        fitsio.write(out_fname, catalog)
+        print(tract_id, patch_id, "finished")
+        del catalog
     else:
-        catalog = task.anacal.run(**data)
-        sel = (catalog["is_primary"]) & (catalog["mask_value"] < 30)
-        catalog = catalog[sel]
-        del sel
-    del data, wcs, bbox, res
-
-    if catalog is not None:
-        if len(catalog) > 10:
-            os.makedirs(outdir, exist_ok=True)
-            fitsio.write(out_fname, catalog)
-            print(tract_id, patch_id, "finished")
-        else:
-            print(tract_id, patch_id, "do not have enough detection")
-    del catalog
+        print(tract_id, patch_id, "cannot finish")
+        return
     return
 
 
@@ -148,12 +145,12 @@ def main():
     config.pixelScale = 0.168  # arcsec/pixel
     skymap = RingsSkyMap(config)
 
-    config = AnacalDetectPipeConfig()
-    config.anacal.force_size = False
-    config.anacal.num_epochs = 8
-    config.anacal.do_noise_bias_correction = True
-    config.anacal.validate_psf = True
-    task = AnacalDetectPipe(config=config)
+    config = FpfsForcePipeConfig()
+    config.fpfs.do_noise_bias_correction = True
+    config.fpfs.use_average_psf = False
+    config.fpfs.npix = 64
+    config.fpfs.sigma_arcsec1 = 0.5657
+    task = FpfsForcePipe(config=config)
 
     noise_corr = fitsio.read(
         "/lustre/work/xiangchong.li/superonionIDark/code/image/HSC_S23B_Shapes/notebook/3_data/noise_correlation.fits"

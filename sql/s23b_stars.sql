@@ -1,44 +1,62 @@
 SELECT
-        object_id
-        ,f1.ra
-        ,f1.dec
-        ,f2.g_psfflux_flux
-        ,f2.g_psfflux_fluxerr
-        ,f2.r_psfflux_flux
-        ,f2.r_psfflux_fluxerr
-        ,f2.i_psfflux_flux
-        ,f2.i_psfflux_fluxerr
-        ,f2.z_psfflux_flux
-        ,f2.z_psfflux_fluxerr
-        ,f2.y_psfflux_flux
-        ,f2.y_psfflux_fluxerr
-		,f2.i_sdssshape_shape11
-		,f2.i_sdssshape_shape22
-		,f2.i_sdssshape_shape12
-		,f2.i_sdssshape_psf_shape11
-		,f2.i_sdssshape_psf_shape22
-		,f2.i_sdssshape_psf_shape12
-		,m1.i_calib_psf_candidate
-		,m1.i_calib_psf_reserved
-		,m1.i_calib_psf_used
-		,m1.tract
-		,m1.patch
-        ,f1.a_g
-        ,f1.a_r
-        ,f1.a_i
-        ,f1.a_z
-        ,f1.a_y
-        ,m2.i_sdsscentroid_ra
-        ,m2.i_sdsscentroid_dec
-    FROM
-        s23_wide.forced  AS f1
-      LEFT JOIN
-        s23_wide.forced2 AS f2 USING (object_id)
-      LEFT JOIN
-        s23_wide.meas2   AS m2 USING (object_id)
-	  LEFT JOIN
-        s23_wide.meas    AS m1 USING (object_id)
-	WHERE
-        f1.isprimary
-		AND m1.i_calib_psf_candidate
+    object_id
+    ,m1.i_ra
+    ,m1.i_dec
+    ,m1.tract
+    ,m1.patch
+    ,m1.i_variance_value
+    ,m2.g_psfflux_flux
+    ,m2.g_psfflux_fluxerr
+    ,m2.r_psfflux_flux
+    ,m2.r_psfflux_fluxerr
+    ,m2.i_psfflux_flux
+    ,m2.i_psfflux_fluxerr
+    ,m2.z_psfflux_flux
+    ,m2.z_psfflux_fluxerr
+    ,m2.y_psfflux_flux
+    ,m2.y_psfflux_fluxerr
+    ,m2.i_sdssshape_shape11
+    ,m2.i_sdssshape_shape22
+    ,m2.i_sdssshape_shape12
+    ,m2.i_sdssshape_psf_shape11
+    ,m2.i_sdssshape_psf_shape22
+    ,m2.i_sdssshape_psf_shape12
+    ,m1.i_calib_psf_candidate
+    ,m1.i_calib_psf_reserved
+    ,m1.i_calib_psf_used
+    ,f1.a_g
+    ,f1.a_r
+    ,f1.a_i
+    ,f1.a_z
+    ,f1.a_y
+    ,m5.i_hsmpsfmoments_shape11
+    ,m5.i_hsmpsfmoments_shape22
+    ,m5.i_hsmpsfmoments_shape12
+    ,m5.i_higherordermomentspsf_03
+    ,m5.i_higherordermomentspsf_12
+    ,m5.i_higherordermomentspsf_21
+    ,m5.i_higherordermomentspsf_30
+    ,m5.i_higherordermomentspsf_04
+    ,m5.i_higherordermomentspsf_13
+    ,m5.i_higherordermomentspsf_22
+    ,m5.i_higherordermomentspsf_31
+    ,m5.i_higherordermomentspsf_40
+FROM
+    s23b_wide.forced  AS f1
+  LEFT JOIN
+    s23b_wide.meas    AS m1 USING (object_id)
+  LEFT JOIN
+    s23b_wide.meas2 AS m2 using (object_id)
+  LEFT JOIN
+    s23b_wide.meas5 AS m5 using (object_id)
+WHERE
+    f1.isprimary AND
+    m1.i_calib_psf_candidate                  AND
+    NOT m1.i_pixelflags_edge                  AND
+    NOT m1.i_pixelflags_interpolatedcenter    AND
+    NOT m1.i_pixelflags_saturatedcenter       AND
+    NOT m1.i_pixelflags_crcenter              AND
+    NOT m1.i_pixelflags_bad                   AND
+    NOT m1.i_pixelflags_suspectcenter         AND
+    NOT m1.i_pixelflags_clipped
 ;

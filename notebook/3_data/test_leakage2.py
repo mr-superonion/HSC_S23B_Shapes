@@ -42,6 +42,7 @@ dm_colnames = [
     "ext_shapeHSM_HigherOrderMomentsPSF_31",
     "ext_shapeHSM_HigherOrderMomentsPSF_40",
 ]
+nbins = 5
 
 
 def parse_args():
@@ -73,7 +74,7 @@ def compute_e_psf_2(catalog, e1, e2, r1, r2, pixel_scale=0.168):
     e1_psf = (psf_mxx - psf_myy) / (psf_mxx + psf_myy) / 2
     e2_psf = psf_mxy / (psf_mxx + psf_myy)
 
-    bins = np.linspace(-0.06, 0.06, 4)
+    bins = np.linspace(-0.06, 0.06, nbins + 1)
     e_psf_2 = 0.5 * (bins[:-1] + bins[1:])
     nom1 = np.histogram(e1_psf, weights=e1, bins=bins)[0]
     denom1 = np.histogram(e1_psf, weights=r1, bins=bins)[0]
@@ -92,7 +93,7 @@ def compute_e_psf_4(catalog, e1, e2, r1, r2):
         catalog["i_ext_shapeHSM_HigherOrderMomentsPSF_13"]
     )
 
-    bins = np.linspace(-0.03, 0.03, 4)
+    bins = np.linspace(-0.03, 0.03, nbins + 1)
     e_psf_4 = 0.5 * (bins[:-1] + bins[1:])
     nom3 = np.histogram(e1_psf4, weights=e1, bins=bins)[0]
     denom3 = np.histogram(e1_psf4, weights=r1, bins=bins)[0]
@@ -107,7 +108,7 @@ def compute_size(catalog, e1, e2, r1, r2, pixel_scale=0.168):
     psf_mxy = catalog["i_ext_shapeHSM_HsmPsfMoments_xy"] * pixel_scale**2
     size_val = 2.355 * (psf_mxx * psf_myy - psf_mxy**2)**0.25
 
-    bins = np.linspace(0.55, 0.75, 4)
+    bins = np.linspace(0.45, 0.75, nbins + 1)
     size = 0.5 * (bins[:-1] + bins[1:])
     nom5 = np.histogram(size_val, weights=e1, bins=bins)[0]
     denom5 = np.histogram(size_val, weights=r1, bins=bins)[0]
@@ -118,7 +119,7 @@ def compute_size(catalog, e1, e2, r1, r2, pixel_scale=0.168):
 
 def compute_variance(catalog, e1, e2, r1, r2):
     var_val = catalog["i_base_Variance_value"]
-    bins = np.linspace(0.002, 0.006, 4)
+    bins = np.linspace(0.002, 0.008, nbins + 1)
     var = 0.5 * (bins[:-1] + bins[1:])
     nom7 = np.histogram(var_val, weights=e1, bins=bins)[0]
     denom7 = np.histogram(var_val, weights=r1, bins=bins)[0]
@@ -198,7 +199,7 @@ def process_patch(entry, skymap, task, comm):
             var, nom7, denom7, nom8, denom8,
         ],
         names=[
-            "e_psf_2", "e1", "r1", "e2", "r2",
+            "e_psf_2", "e1_2", "r1_2", "e2_2", "r2_2",
             "e_psf_4", "e1_4", "r1_4", "e2_4", "r2_4",
             "size", "e1_s", "r1_s", "e2_s", "r2_s",
             "var", "e1_v", "r1_v", "e2_v", "r2_v",

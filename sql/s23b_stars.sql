@@ -5,52 +5,38 @@ SELECT
     ,m1.tract
     ,m1.patch
     ,m1.i_variance_value
-    ,m2.g_psfflux_flux
-    ,m2.g_psfflux_fluxerr
-    ,m2.r_psfflux_flux
-    ,m2.r_psfflux_fluxerr
     ,m2.i_psfflux_flux
     ,m2.i_psfflux_fluxerr
-    ,m2.z_psfflux_flux
-    ,m2.z_psfflux_fluxerr
-    ,m2.y_psfflux_flux
-    ,m2.y_psfflux_fluxerr
-    ,m2.i_sdssshape_shape11
-    ,m2.i_sdssshape_shape22
-    ,m2.i_sdssshape_shape12
-    ,m2.i_sdssshape_psf_shape11
-    ,m2.i_sdssshape_psf_shape22
-    ,m2.i_sdssshape_psf_shape12
-    ,m1.i_calib_psf_candidate
     ,m1.i_calib_psf_reserved
     ,m1.i_calib_psf_used
-    ,f1.a_g
-    ,f1.a_r
     ,f1.a_i
-    ,f1.a_z
-    ,f1.a_y
     ,m5.i_hsmpsfmoments_shape11
     ,m5.i_hsmpsfmoments_shape22
     ,m5.i_hsmpsfmoments_shape12
-    ,m5.i_higherordermomentspsf_03
-    ,m5.i_higherordermomentspsf_12
-    ,m5.i_higherordermomentspsf_21
-    ,m5.i_higherordermomentspsf_30
+	,m5.i_hsmsourcemoments_shape11
+    ,m5.i_hsmsourcemoments_shape22
+    ,m5.i_hsmsourcemoments_shape12
     ,m5.i_higherordermomentspsf_04
     ,m5.i_higherordermomentspsf_13
     ,m5.i_higherordermomentspsf_22
     ,m5.i_higherordermomentspsf_31
     ,m5.i_higherordermomentspsf_40
+    ,m5.i_higherordermomentssource_04
+    ,m5.i_higherordermomentssource_13
+    ,m5.i_higherordermomentssource_22
+    ,m5.i_higherordermomentssource_31
+    ,m5.i_higherordermomentssource_40
 FROM
     s23b_wide.forced  AS f1
   LEFT JOIN
-    s23b_wide.meas    AS m1 USING (object_id)
+    s23b_wide.meas  AS m1 USING (object_id)
   LEFT JOIN
     s23b_wide.meas2 AS m2 using (object_id)
   LEFT JOIN
     s23b_wide.meas5 AS m5 using (object_id)
 WHERE
-    f1.isprimary AND
+    meas.tract = {$tract}                     AND
+    f1.isprimary                              AND
     m1.i_calib_psf_candidate                  AND
     NOT m1.i_pixelflags_edge                  AND
     NOT m1.i_pixelflags_interpolatedcenter    AND

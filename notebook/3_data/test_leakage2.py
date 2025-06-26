@@ -138,18 +138,17 @@ def process_patch(entry, skymap, task, comm):
     bdir = "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/database/"
     outdir = f"{bdir}/s23b-anacal/tracts/{tract_id}/{patch_id}"
     det_fname = os.path.join(outdir, "detect.fits")
-    fpfs_fname = os.path.join(outdir, "fpfs.fits")
-    out_fname = os.path.join(outdir, "leakage2.fits")
+    out_fname = os.path.join(outdir, "leakage.fits")
     if os.path.isfile(out_fname) or (not os.path.isfile(det_fname)):
         return None
     anacal_catalog = fitsio.read(det_fname)
-    if os.path.isfile(fpfs_fname):
-        tmp = fitsio.read(fpfs_fname)
-        anacal_catalog["fpfs_e1"] = tmp["fpfs1_e1"]
-        anacal_catalog["fpfs_de1_dg1"] = tmp["fpfs1_de1_dg1"]
-        anacal_catalog["fpfs_e2"] = tmp["fpfs1_e2"]
-        anacal_catalog["fpfs_de2_dg2"] = tmp["fpfs1_de2_dg2"]
-        del tmp
+    # fpfs_fname = os.path.join(outdir, "fpfs.fits")
+    # tmp = fitsio.read(fpfs_fname)
+    # anacal_catalog["fpfs_e1"] = tmp["fpfs1_e1"]
+    # anacal_catalog["fpfs_de1_dg1"] = tmp["fpfs1_de1_dg1"]
+    # anacal_catalog["fpfs_e2"] = tmp["fpfs1_e2"]
+    # anacal_catalog["fpfs_de2_dg2"] = tmp["fpfs1_de2_dg2"]
+    # del tmp
 
     cat_dir = "/lustre/HSC_DR/hsc_ssp/dr4/s23b/data/s23b_wide/unified/deepCoadd_meas"
     band = "i"

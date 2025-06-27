@@ -37,16 +37,12 @@ dm_colnames = [
     "ext_shapeHSM_HsmPsfMoments_xx",
     "ext_shapeHSM_HsmPsfMoments_yy",
     "ext_shapeHSM_HsmPsfMoments_xy",
-    "ext_shapeHSM_HigherOrderMomentsPSF_03",
-    "ext_shapeHSM_HigherOrderMomentsPSF_12",
-    "ext_shapeHSM_HigherOrderMomentsPSF_21",
-    "ext_shapeHSM_HigherOrderMomentsPSF_30",
     "ext_shapeHSM_HigherOrderMomentsPSF_04",
     "ext_shapeHSM_HigherOrderMomentsPSF_13",
-    "ext_shapeHSM_HigherOrderMomentsPSF_22",
     "ext_shapeHSM_HigherOrderMomentsPSF_31",
     "ext_shapeHSM_HigherOrderMomentsPSF_40",
 ]
+nbins = 5
 
 
 def parse_args():
@@ -60,7 +56,7 @@ def parse_args():
         "--end", type=int, required=True, help="End index of datalist."
     )
     parser.add_argument(
-        "--field", type=str, required=True, help="field name"
+        "--field", type=str, default="all", required=False, help="field name"
     )
     return parser.parse_args()
 
@@ -70,6 +66,68 @@ def split_work(data, size, rank):
     return data[rank::size]
 
 
+def compute_e_psf_2(catalog, e1, e2, r1, r2, pixel_scale=0.168):
+    psf_mxx = catalog["i_ext_shapeHSM_HsmPsfMoments_xx"] * pixel_scale**2
+    psf_myy = catalog["i_ext_shapeHSM_HsmPsfMoments_yy"] * pixel_scale**2
+    psf_mxy = catalog["i_ext_shapeHSM_HsmPsfMoments_xy"] * pixel_scale**2
+
+    e1_psf = (psf_mxx - psf_myy) / (psf_mxx + psf_myy) / 2
+    e2_psf = psf_mxy / (psf_mxx + psf_myy)
+
+    bins = np.linspace(-0.06, 0.06, nbins + 1)
+    bc = 0.5 * (bins[:-1] + bins[1:])
+    nom1 = np.histogram(e1_psf, weights=e1, bins=bins)[0]
+    denom1 = np.histogram(e1_psf, weights=r1, bins=bins)[0]
+    nom2 = np.histogram(e2_psf, weights=e2, bins=bins)[0]
+    denom2 = np.histogram(e2_psf, weights=r2, bins=bins)[0]
+    return bc, nom1, denom1, nom2, denom2
+
+
+def compute_e_psf_4(catalog, e1, e2, r1, r2):
+    e1_psf4 = (
+        catalog["i_ext_shapeHSM_HigherOrderMomentsPSF_40"] -
+        catalog["i_ext_shapeHSM_HigherOrderMomentsPSF_04"]
+    )
+    e2_psf4 = 2.0 * (
+        catalog["i_ext_shapeHSM_HigherOrderMomentsPSF_31"] +
+        catalog["i_ext_shapeHSM_HigherOrderMomentsPSF_13"]
+    )
+
+    bins = np.linspace(-0.03, 0.03, nbins + 1)
+    e_psf_4 = 0.5 * (bins[:-1] + bins[1:])
+    nom3 = np.histogram(e1_psf4, weights=e1, bins=bins)[0]
+    denom3 = np.histogram(e1_psf4, weights=r1, bins=bins)[0]
+    nom4 = np.histogram(e2_psf4, weights=e2, bins=bins)[0]
+    denom4 = np.histogram(e2_psf4, weights=r2, bins=bins)[0]
+    return e_psf_4, nom3, denom3, nom4, denom4
+
+
+def compute_size(catalog, e1, e2, r1, r2, pixel_scale=0.168):
+    psf_mxx = catalog["i_ext_shapeHSM_HsmPsfMoments_xx"] * pixel_scale**2
+    psf_myy = catalog["i_ext_shapeHSM_HsmPsfMoments_yy"] * pixel_scale**2
+    psf_mxy = catalog["i_ext_shapeHSM_HsmPsfMoments_xy"] * pixel_scale**2
+    size_val = 2.355 * (psf_mxx * psf_myy - psf_mxy**2)**0.25
+
+    bins = np.linspace(0.45, 0.75, nbins + 1)
+    bc = 0.5 * (bins[:-1] + bins[1:])
+    nom5 = np.histogram(size_val, weights=e1, bins=bins)[0]
+    denom5 = np.histogram(size_val, weights=r1, bins=bins)[0]
+    nom6 = np.histogram(size_val, weights=e2, bins=bins)[0]
+    denom6 = np.histogram(size_val, weights=r2, bins=bins)[0]
+    return bc, nom5, denom5, nom6, denom6
+
+
+def compute_variance(catalog, e1, e2, r1, r2):
+    var_val = catalog["i_base_Variance_value"]
+    bins = np.linspace(0.002, 0.008, nbins + 1)
+    var = 0.5 * (bins[:-1] + bins[1:])
+    nom7 = np.histogram(var_val, weights=e1, bins=bins)[0]
+    denom7 = np.histogram(var_val, weights=r1, bins=bins)[0]
+    nom8 = np.histogram(var_val, weights=e2, bins=bins)[0]
+    denom8 = np.histogram(var_val, weights=r2, bins=bins)[0]
+    return var, nom7, denom7, nom8, denom8
+
+
 def process_patch(entry, skymap, task, comm):
     tract_id = entry["tract"]
     patch_db = entry["patch"]
@@ -77,16 +135,23 @@ def process_patch(entry, skymap, task, comm):
     patch_y = patch_db % 100
     patch_id = patch_x + patch_y * 9
 
-    bdir = "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/database/"
-    outdir = f"{bdir}/s23b-anacal/tracts/{tract_id}/{patch_id}"
-    det_fname = os.path.join(outdir, "detect.fits")
-    out_fname = os.path.join(outdir, "leakage.fits")
-    if os.path.isfile(out_fname) or (not os.path.isfile(det_fname)):
+    out_dir = f"{os.environ['s23b_anacal']}/{tract_id}/{patch_id}"
+    out_fname = os.path.join(out_dir, "leakage.fits")
+    if os.path.isfile(out_fname):
         return None
+    det_fname = os.path.join(out_dir, "detect.fits")
+    anacal_catalog = fitsio.read(det_fname)
+    fpfs_fname = os.path.join(out_dir, "fpfs.fits")
+    tmp = fitsio.read(fpfs_fname)
+    anacal_catalog["fpfs_e1"] = tmp["fpfs1_e1"]
+    anacal_catalog["fpfs_de1_dg1"] = tmp["fpfs1_de1_dg1"]
+    anacal_catalog["fpfs_e2"] = tmp["fpfs1_e2"]
+    anacal_catalog["fpfs_de2_dg2"] = tmp["fpfs1_de2_dg2"]
+    del tmp
 
-    cat_dir = "/lustre/HSC_DR/hsc_ssp/dr4/s23b/data/s23b_wide/unified/deepCoadd_meas"
     band = "i"
-    files = glob.glob(os.path.join(cat_dir, f"{tract_id}/{patch_id}/{band}/*"))
+    cat_dir = f"{os.environ['s23b_meas']}/{tract_id}/{patch_id}/i"
+    files = glob.glob(os.path.join(cat_dir, "*.fits"))
     cat = rfn.repack_fields(fitsio.read(files[0])[dm_colnames])
     map_dict = {name: f"{band}_" + name for name in dm_colnames}
     dm_catalog = rfn.rename_fields(cat, map_dict)
@@ -95,19 +160,15 @@ def process_patch(entry, skymap, task, comm):
         skyMap=skymap,
         tract=tract_id,
         patch=patch_id,
-        catalog=fitsio.read(det_fname),
+        catalog=anacal_catalog,
         dm_catalog=dm_catalog,
         truth_catalog=None,
     ).catalog
-    del dm_catalog
+    del dm_catalog, anacal_catalog
     mag = 27.0 - 2.5 * np.log10(catalog["flux"])
-    mask = (catalog["mask_value"] < 20) & (mag < 24.5)
+    mask = (catalog["mask_value"] < 10) & (mag < 25.0)
     catalog = catalog[mask]
-    psf_mxx = catalog["i_ext_shapeHSM_HsmPsfMoments_xx"]
-    psf_myy = catalog["i_ext_shapeHSM_HsmPsfMoments_yy"]
-    psf_mxy = catalog["i_ext_shapeHSM_HsmPsfMoments_xy"]
-    e1_psf = (psf_mxx - psf_myy) / (psf_mxx + psf_myy) / 2.0
-    e2_psf = psf_mxy / (psf_mxx + psf_myy)
+
     e1 = catalog["fpfs_e1"] * catalog["wsel"]
     e2 = catalog["fpfs_e2"] * catalog["wsel"]
     r1 = (
@@ -118,25 +179,29 @@ def process_patch(entry, skymap, task, comm):
         catalog["fpfs_de2_dg2"] * catalog["wsel"] +
         catalog["dwsel_dg2"] * catalog["fpfs_e2"]
     )
-    bins = np.linspace(-0.1, 0.1, 6)
-    nom1 = np.histogram(
-        e1_psf, weights=e1, density=False, bins=bins
-    )[0]
-    denom1 = np.histogram(
-        e1_psf, weights=r1, density=False, bins=bins
-    )[0]
-    nom2 = np.histogram(
-        e2_psf, weights=e2, density=False, bins=bins
-    )[0]
-    denom2 = np.histogram(
-        e2_psf, weights=r2, density=False, bins=bins
-    )[0]
-    bin_centers = 0.5 * (bins[:-1] + bins[1:])
 
-    # Add bin_centers as the first column
+    e_psf_2, nom1, denom1, nom2, denom2 = compute_e_psf_2(
+        catalog, e1, e2, r1, r2)
+    e_psf_4, nom3, denom3, nom4, denom4 = compute_e_psf_4(
+        catalog, e1, e2, r1, r2)
+    size, nom5, denom5, nom6, denom6 = compute_size(
+        catalog, e1, e2, r1, r2)
+    var, nom7, denom7, nom8, denom8 = compute_variance(
+        catalog, e1, e2, r1, r2)
+
     out = astTable.Table(
-        [bin_centers, nom1, denom1, nom2, denom2],
-        names=["bin_center", "e1", "r1", "e2", "r2"]
+        [
+            e_psf_2, nom1, denom1, nom2, denom2,
+            e_psf_4, nom3, denom3, nom4, denom4,
+            size, nom5, denom5, nom6, denom6,
+            var, nom7, denom7, nom8, denom8,
+        ],
+        names=[
+            "e_psf_2", "e1_2", "r1_2", "e2_2", "r2_2",
+            "e_psf_4", "e1_4", "r1_4", "e2_4", "r2_4",
+            "size", "e1_s", "r1_s", "e2_s", "r2_s",
+            "var", "e1_v", "r1_v", "e2_v", "r2_v",
+        ]
     )
     out.write(out_fname)
     return
@@ -151,12 +216,12 @@ def main():
 
     if rank == 0:
         full = fitsio.read(
-            "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/tracts_fdfc_v1_trim6.fits"
+            "tracts_fdfc_v1_trim6.fits"
         )
         selected = full[args.start: args.end]
-        sel = (selected["field"] == args.field)
-        selected = selected[sel]
-        print(len(selected))
+        if args.field != "all":
+            sel = (selected["field"] == args.field)
+            selected = selected[sel]
     else:
         selected = None
 

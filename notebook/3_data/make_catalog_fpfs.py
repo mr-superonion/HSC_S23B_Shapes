@@ -3,6 +3,7 @@
 import argparse
 import gc
 import glob
+import numpy as np
 import os
 from tqdm import tqdm
 
@@ -27,7 +28,7 @@ def parse_args():
         "--end", type=int, required=True, help="End index of datalist."
     )
     parser.add_argument(
-        "--field", type=str, required=True, help="field name"
+        "--field", type=str, default="all", required=False, help="field name"
     )
     return parser.parse_args()
 
@@ -38,31 +39,20 @@ def split_work(data, size, rank):
 
 
 def read_files(tract_id, patch_id):
-    bdir = "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/database/"
-    image_dir = (
-        "/lustre/HSC_DR/hsc_ssp/dr4/s23b/data/s23b_wide/unified/deepCoadd_calexp"
-    )
-    files = glob.glob(os.path.join(image_dir, f"{tract_id}/{patch_id}/i/*"))
-    if not files:
-        print(f"Canot find image for tract: {tract_id}, patch: {patch_id}")
-        return None
+    calexp_dir = f"{os.environ['s23b_calexp']}/{tract_id}/{patch_id}/i"
+    exp_fname = glob.glob(os.path.join(calexp_dir, "*.fits"))[0]
+    exposure = afwImage.ExposureF.readFits(exp_fname)
 
-    fname = files[0]
-    exposure = afwImage.ExposureF.readFits(fname)
-    mask_dir = f"{bdir}/s23b-brightStarMask/tracts_mask/{tract_id}/{patch_id}"
-    mask_fname = os.path.join(mask_dir, "mask.fits")
-    if os.path.isfile(mask_fname):
-        bmask = fitsio.read(mask_fname)
-    else:
-        bmask = None
+    mask_dir = f"{os.environ['s23b_mask']}/{tract_id}/{patch_id}"
+    mask_fname = os.path.join(mask_dir, "mask2.fits")
+    bmask = fitsio.read(mask_fname)
+    nim_dir = f"{os.environ['s23b_nimg']}/{tract_id}/{patch_id}/i"
+    nim_fname = glob.glob(os.path.join(nim_dir, "*.fits"))[0]
+    bmask = (bmask | (fitsio.read(nim_fname) <=2).astype(np.int16))
 
-    det_dir = f"{bdir}/s23b-anacal/tracts/{tract_id}/{patch_id}"
+    det_dir = f"{os.environ['s23b_anacal']}/{tract_id}/{patch_id}"
     det_fname = os.path.join(det_dir, "detect.fits")
-    if os.path.isfile(mask_fname):
-        detection = fitsio.read(det_fname)
-    else:
-        print(f"cannot find {det_fname}")
-        return None
+    detection = fitsio.read(det_fname)
 
     return {
         "exposure": exposure,
@@ -77,11 +67,9 @@ def process_patch(entry, skymap, task, comm, noise_corr):
     patch_x = patch_db // 100
     patch_y = patch_db % 100
     patch_id = patch_x + patch_y * 9
-    bdir = "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/database/"
-    outdir = f"{bdir}/s23b-anacal/tracts/{tract_id}/{patch_id}"
-    out_fname = os.path.join(outdir, "fpfs3.fits")
+    out_dir = f"{os.environ['s23b_anacal']}/{tract_id}/{patch_id}"
+    out_fname = os.path.join(out_dir, "fpfs.fits")
     if os.path.isfile(out_fname):
-        print("already has outcome")
         return
 
     patch_info = skymap[tract_id][patch_id]
@@ -90,25 +78,19 @@ def process_patch(entry, skymap, task, comm, noise_corr):
     res = read_files(tract_id, patch_id)
     del wcs, bbox, patch_info
 
-    if res is not None:
-        seed = (tract_id * 1000 + patch_id) * 5
-        data = task.fpfs.prepare_data(
-            exposure=res["exposure"],
-            seed=seed,
-            noise_corr=noise_corr,
-            detection=res["detection"],
-            band=None,
-            mask_array=res["mask"],
-        )
-        catalog = task.fpfs.run(**data)
-        del data, res
-        os.makedirs(outdir, exist_ok=True)
-        fitsio.write(out_fname, catalog)
-        print(tract_id, patch_id, "finished")
-        del catalog
-    else:
-        print(tract_id, patch_id, "cannot finish")
-        return
+    seed = (tract_id * 1000 + patch_id) * 5
+    data = task.fpfs.prepare_data(
+        exposure=res["exposure"],
+        seed=seed,
+        noise_corr=noise_corr,
+        detection=res["detection"],
+        band=None,
+        mask_array=res["mask"],
+    )
+    catalog = task.fpfs.run(**data)
+    del data, res
+    fitsio.write(out_fname, catalog)
+    del catalog
     return
 
 
@@ -121,7 +103,7 @@ def main():
 
     if rank == 0:
         full = fitsio.read(
-            "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/tracts_fdfc_v1_trim6.fits"
+            "tracts_fdfc_v1_trim6.fits"
         )
         selected = full[args.start: args.end]
         if args.field != "all":
@@ -149,14 +131,17 @@ def main():
     task = FpfsForcePipe(config=config)
 
     noise_corr = fitsio.read(
-        "/lustre/work/xiangchong.li/superonionIDark/code/image/HSC_S23B_Shapes/notebook/3_data/noise_correlation.fits"
+        "noise_correlation2.fits"
     )
     # Initialize tqdm progress bar for this rank
     noise_corr = None
     pbar = tqdm(total=len(my_entries), desc=f"Rank {rank}", position=rank)
     for entry in my_entries:
-        process_patch(entry, skymap, task, comm, noise_corr)
-        gc.collect()
+        try:
+            process_patch(entry, skymap, task, comm, noise_corr)
+            gc.collect()
+        except Exception:
+            print("failed: ", entry["index"])
         pbar.update(1)
     pbar.close()
     return

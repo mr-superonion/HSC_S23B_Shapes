@@ -2,11 +2,11 @@
 
 import argparse
 import os
-import numpy as np
+import glob
 
 import fitsio
-import lsst.afw.image as afwImage
 from mpi4py import MPI
+import gc
 
 
 # Parse command-line arguments
@@ -34,17 +34,32 @@ def process_patch(entry):
     patch_x = patch_db // 100
     patch_y = patch_db % 100
     patch_id = patch_x + patch_y * 9
-    sel = False
+    det_dir = f"{os.environ['s23b_anacal']}/{tract_id}/{patch_id}"
+    det_fname = os.path.join(det_dir, "detect.fits")
+    try:
+        a = fitsio.read(det_fname)
+    except Exception:
+        print("failed:", entry["index"])
 
-    bdir = "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/database/"
-    basedir = f"{bdir}/s23b-anacal/tracts/{tract_id}/{patch_id}"
-    det_fname = os.path.join(basedir, "detect.fits")
-    force_fname = os.path.join(basedir, "force.fits")
-    if not os.path.isfile(force_fname):
-        sel = True
-        if os.path.isfile(det_fname):
-            os.popen(f"rm {det_fname}")
-    return sel
+    # for band in ["g", "r", "i", "z", "y"]:
+    #     calexp_dir = f"{os.environ['s23b_calexp']}/{tract_id}/{patch_id}/{band}"
+    #     if not os.path.isdir(calexp_dir):
+    #         print(tract_id, patch_id, band)
+    #         return
+    #     fnames = glob.glob(os.path.join(calexp_dir, "*.fits"))
+    #     if len(fnames) == 0:
+    #         print(tract_id, patch_id, band)
+    #         return
+    #     fname = fnames[0]
+    #     if not os.path.isfile(fname):
+    #         print(tract_id, patch_id, band)
+    #         return
+    #     try:
+    #         exp = fitsio.read(fname)
+    #         exp.shape[0]
+    #         del exp
+    #     except Exception:
+    #         print(tract_id, patch_id, band)
 
 
 def main():
@@ -55,9 +70,7 @@ def main():
     size = comm.Get_size()
 
     if rank == 0:
-        full = fitsio.read(
-            "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/tracts_fdfc_v1_trim3.fits"
-        )
+        full = fitsio.read("tracts_fdfc_v1_trim6.fits")
         selected = full[args.start: args.end]
     else:
         selected = None
@@ -65,21 +78,9 @@ def main():
     selected = comm.bcast(selected, root=0)
     my_entries = split_work(selected, size, rank)
 
-    indexes = []
     for entry in my_entries:
-        valid = process_patch(entry)
-        if valid:
-            indexes.append(entry["index"])
-    indexes = np.array(indexes, dtype=int)
-
-    all_indexes = comm.gather(indexes, root=0)
-    if rank == 0:
-        merged = np.concatenate([a for a in all_indexes if a.size > 0])
-        fitsio.write(
-            "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/valid.fits",
-            merged,
-            clobber=True      # overwrite if the file exists
-        )
+        process_patch(entry)
+        gc.collect()
     return
 
 

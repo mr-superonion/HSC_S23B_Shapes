@@ -14,7 +14,7 @@ from astropy.table import Table
 
 
 version = 20190924.1
-vv = "-galaxy"
+vv = "-random"
 release_year = "s23b"
 release_version = "dr4"
 prefix = "database/%s%s/tracts" % (release_year, vv)
@@ -106,9 +106,22 @@ def http_json_post(url, data):
 
 
 def http_post(url, post_data, headers):
-    req = urllib.request.Request(url, post_data.encode("utf-8"), headers)
-    res = urllib.request.urlopen(req)
-    return res
+    default_headers = {
+        "User-Agent": "Mozilla/5.0",  # Pretend to be a browser
+        "Accept": "application/json",  # Explicitly accept JSON
+        "Content-Type": "application/json",  # Needed for HSC API
+    }
+    # Merge headers: default values will be overridden by input if needed
+    default_headers.update(headers)
+
+    req = urllib.request.Request(url, post_data.encode("utf-8"), headers=default_headers)
+    try:
+        return urllib.request.urlopen(req)
+    except urllib.error.HTTPError as e:
+        print(f"HTTPError {e.code}: {e.reason}")
+        print("Headers sent:", req.header_items())
+        print("Payload sent:", post_data)
+        raise
 
 
 def submit_job(credential, sql, out_format):

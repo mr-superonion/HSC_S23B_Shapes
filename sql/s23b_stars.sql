@@ -35,7 +35,7 @@ FROM
   LEFT JOIN
     s23b_wide.meas5 AS m5 using (object_id)
 WHERE
-    meas.tract = {$tract}                     AND
+    m1.tract = {$tract}                     AND
     f1.isprimary                              AND
     m1.i_calib_psf_candidate                  AND
     NOT m1.i_pixelflags_edge                  AND

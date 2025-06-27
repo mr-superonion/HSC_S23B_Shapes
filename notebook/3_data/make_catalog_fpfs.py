@@ -39,13 +39,6 @@ def split_work(data, size, rank):
 
 def read_files(tract_id, patch_id):
     bdir = "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/database/"
-    outdir = f"{bdir}/s23b-anacal/tracts/{tract_id}/{patch_id}"
-    out_fname = os.path.join(outdir, "fpfs.fits")
-    if os.path.isfile(out_fname):
-        print("already has outcome")
-        return None
-
-    bdir = "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/database/"
     image_dir = (
         "/lustre/HSC_DR/hsc_ssp/dr4/s23b/data/s23b_wide/unified/deepCoadd_calexp"
     )
@@ -86,7 +79,10 @@ def process_patch(entry, skymap, task, comm, noise_corr):
     patch_id = patch_x + patch_y * 9
     bdir = "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/database/"
     outdir = f"{bdir}/s23b-anacal/tracts/{tract_id}/{patch_id}"
-    out_fname = os.path.join(outdir, "fpfs.fits")
+    out_fname = os.path.join(outdir, "fpfs3.fits")
+    if os.path.isfile(out_fname):
+        print("already has outcome")
+        return
 
     patch_info = skymap[tract_id][patch_id]
     wcs = patch_info.getWcs()
@@ -156,6 +152,7 @@ def main():
         "/lustre/work/xiangchong.li/superonionIDark/code/image/HSC_S23B_Shapes/notebook/3_data/noise_correlation.fits"
     )
     # Initialize tqdm progress bar for this rank
+    noise_corr = None
     pbar = tqdm(total=len(my_entries), desc=f"Rank {rank}", position=rank)
     for entry in my_entries:
         process_patch(entry, skymap, task, comm, noise_corr)

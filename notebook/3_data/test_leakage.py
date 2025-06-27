@@ -101,7 +101,7 @@ def process_patch(entry, skymap, task, comm):
     ).catalog
     del dm_catalog
     mag = 27.0 - 2.5 * np.log10(catalog["flux"])
-    mask = (catalog["mask_value"] < 5) & (mag < 25.0)
+    mask = (catalog["mask_value"] < 20) & (mag < 24.5)
     catalog = catalog[mask]
     psf_mxx = catalog["i_ext_shapeHSM_HsmPsfMoments_xx"]
     psf_myy = catalog["i_ext_shapeHSM_HsmPsfMoments_yy"]

@@ -14,7 +14,7 @@ from astropy.table import Table
 
 
 version = 20190924.1
-vv = "-random"
+vv = "-gals2"
 release_year = "s23b"
 release_version = "dr4"
 prefix = "database/%s%s/tracts" % (release_year, vv)

@@ -36,13 +36,13 @@ FROM
     s23b_wide.meas5 AS m5 using (object_id)
 WHERE
     m1.tract = {$tract}                     AND
-    f1.isprimary                              AND
-    m1.i_calib_psf_candidate                  AND
-    NOT m1.i_pixelflags_edge                  AND
-    NOT m1.i_pixelflags_interpolatedcenter    AND
-    NOT m1.i_pixelflags_saturatedcenter       AND
-    NOT m1.i_pixelflags_crcenter              AND
-    NOT m1.i_pixelflags_bad                   AND
-    NOT m1.i_pixelflags_suspectcenter         AND
+    f1.isprimary                            AND
+    m1.i_calib_psf_candidate                AND
+    NOT m1.i_pixelflags_edge                AND
+    NOT m1.i_pixelflags_interpolatedcenter  AND
+    NOT m1.i_pixelflags_saturatedcenter     AND
+    NOT m1.i_pixelflags_crcenter            AND
+    NOT m1.i_pixelflags_bad                 AND
+    NOT m1.i_pixelflags_suspectcenter       AND
     NOT m1.i_pixelflags_clipped
 ;

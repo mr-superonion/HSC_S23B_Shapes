@@ -3,16 +3,16 @@
 import argparse
 import gc
 import glob
-import numpy as np
 import os
 from tqdm import tqdm
 
 import fitsio
+import numpy as np
 import lsst.afw.image as afwImage
 from lsst.skymap.ringsSkyMap import RingsSkyMap, RingsSkyMapConfig
 from mpi4py import MPI
-from xlens.process_pipe.fpfs_force import (
-    FpfsForcePipe, FpfsForcePipeConfig
+from xlens.process_pipe.anacal_detect import (
+    AnacalDetectPipe, AnacalDetectPipeConfig
 )
 
 
@@ -42,25 +42,17 @@ def read_files(tract_id, patch_id):
     calexp_dir = f"{os.environ['s23b_calexp']}/{tract_id}/{patch_id}/i"
     exp_fname = glob.glob(os.path.join(calexp_dir, "*.fits"))[0]
     exposure = afwImage.ExposureF.readFits(exp_fname)
-
     mask_dir = f"{os.environ['s23b_mask']}/{tract_id}/{patch_id}"
     mask_fname = os.path.join(mask_dir, "mask2.fits")
     bmask = fitsio.read(mask_fname)
     nim_dir = f"{os.environ['s23b_nimg']}/{tract_id}/{patch_id}/i"
     nim_fname = glob.glob(os.path.join(nim_dir, "*.fits"))[0]
     bmask = (bmask | (fitsio.read(nim_fname) <=2).astype(np.int16))
-
-    det_dir = f"{os.environ['s23b_anacal2']}/{tract_id}/{patch_id}"
-    det_fname = os.path.join(det_dir, "detect.fits")
-    detection = fitsio.read(det_fname)
-
     corr_fname = f"{os.environ['s23b_noisecorr']}/{tract_id}.fits"
     noise_corr = fitsio.read(corr_fname)
-
     return {
         "exposure": exposure,
         "mask": bmask,
-        "detection": detection,
         "noise_corr": noise_corr,
     }
 
@@ -72,28 +64,38 @@ def process_patch(entry, skymap, task, noise_corr):
     patch_y = patch_db % 100
     patch_id = patch_x + patch_y * 9
     out_dir = f"{os.environ['s23b_anacal2']}/{tract_id}/{patch_id}"
-    out_fname = os.path.join(out_dir, "fpfs.fits")
+    out_fname = os.path.join(out_dir, "detect.fits")
     if os.path.isfile(out_fname):
-        return
+        return None
 
     patch_info = skymap[tract_id][patch_id]
     wcs = patch_info.getWcs()
     bbox = patch_info.getOuterBBox()
-    res = read_files(tract_id, patch_id)
-    del wcs, bbox, patch_info
 
+    res = read_files(tract_id, patch_id)
     seed = (tract_id * 1000 + patch_id) * 5
-    data = task.fpfs.prepare_data(
+    data = task.anacal.prepare_data(
         exposure=res["exposure"],
         seed=seed,
         noise_corr=res["noise_corr"],
-        detection=res["detection"],
+        detection=None,
         band=None,
+        skyMap=skymap,
+        tract=tract_id,
+        patch=patch_id,
         mask_array=res["mask"],
     )
-    catalog = task.fpfs.run(**data)
-    del data, res
-    fitsio.write(out_fname, catalog)
+    catalog = task.anacal.run(**data)
+    del data, wcs, bbox, res
+    sel = (catalog["is_primary"]) & (catalog["mask_value"] < 30)
+    catalog = catalog[sel]
+    del sel
+    if len(catalog) > 10:
+        os.makedirs(out_dir, exist_ok=True)
+        fitsio.write(out_fname, catalog)
+        print(tract_id, patch_id, "finished")
+    else:
+        print(tract_id, patch_id, "do not have enough detection")
     del catalog
     return
 
@@ -127,25 +129,21 @@ def main():
     config.pixelScale = 0.168  # arcsec/pixel
     skymap = RingsSkyMap(config)
 
-    config = FpfsForcePipeConfig()
-    config.fpfs.do_noise_bias_correction = True
-    config.fpfs.use_average_psf = False
-    config.fpfs.npix = 64
-    config.fpfs.sigma_arcsec1 = 0.5657
-    task = FpfsForcePipe(config=config)
+    config = AnacalDetectPipeConfig()
+    config.anacal.force_size = False
+    config.anacal.num_epochs = 8
+    config.anacal.do_noise_bias_correction = True
+    config.anacal.validate_psf = True
+    task = AnacalDetectPipe(config=config)
 
     noise_corr = fitsio.read(
         "noise_correlation2.fits"
     )
     # Initialize tqdm progress bar for this rank
-    noise_corr = None
     pbar = tqdm(total=len(my_entries), desc=f"Rank {rank}", position=rank)
     for entry in my_entries:
-        try:
-            process_patch(entry, skymap, task, noise_corr)
-            gc.collect()
-        except Exception:
-            print("failed: ", entry["index"])
+        process_patch(entry, skymap, task, noise_corr)
+        gc.collect()
         pbar.update(1)
     pbar.close()
     return

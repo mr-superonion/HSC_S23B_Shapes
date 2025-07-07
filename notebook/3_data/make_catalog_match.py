@@ -4,6 +4,7 @@ import argparse
 import gc
 import glob
 import os
+import numpy as np
 from tqdm import tqdm
 
 import fitsio
@@ -15,41 +16,78 @@ from xlens.process_pipe.match import (
 )
 
 from numpy.lib import recfunctions as rfn
+from lsst.afw.image import ExposureF
+from lsst.afw.table import SourceCatalog
 
 dm_colnames = [
+    "id",
     "deblend_nChild",
-    "deblend_blendedness",
-    "deblend_peak_center_x",
-    "deblend_peak_center_y",
-    "base_Blendedness_abs",
-    "base_CircularApertureFlux_3_0_instFlux",
-    "base_CircularApertureFlux_3_0_instFluxErr",
-    "base_CircularApertureFlux_4_5_instFlux",
-    "base_CircularApertureFlux_4_5_instFluxErr",
+    "base_SdssCentroid_x",
+    "base_SdssCentroid_y",
+    "base_Variance_value",
     "base_GaussianFlux_instFlux",
     "base_GaussianFlux_instFluxErr",
-    "base_PsfFlux_instFlux",
-    "base_PsfFlux_instFluxErr",
-    "base_Variance_value",
-    "ext_photometryKron_KronFlux_instFlux",
-    "ext_photometryKron_KronFlux_instFluxErr",
-    "modelfit_CModel_instFlux",
-    "modelfit_CModel_instFluxErr",
-    "base_ClassificationExtendedness_value",
-    "base_FootprintArea_value",
     "ext_shapeHSM_HsmPsfMoments_xx",
     "ext_shapeHSM_HsmPsfMoments_yy",
     "ext_shapeHSM_HsmPsfMoments_xy",
-    "ext_shapeHSM_HigherOrderMomentsPSF_03",
-    "ext_shapeHSM_HigherOrderMomentsPSF_12",
-    "ext_shapeHSM_HigherOrderMomentsPSF_21",
-    "ext_shapeHSM_HigherOrderMomentsPSF_30",
     "ext_shapeHSM_HigherOrderMomentsPSF_04",
     "ext_shapeHSM_HigherOrderMomentsPSF_13",
     "ext_shapeHSM_HigherOrderMomentsPSF_22",
     "ext_shapeHSM_HigherOrderMomentsPSF_31",
     "ext_shapeHSM_HigherOrderMomentsPSF_40",
+    "base_LocalWcs_CDMatrix_1_1",
+    "base_LocalWcs_CDMatrix_1_2",
+    "base_LocalWcs_CDMatrix_2_1",
+    "base_LocalWcs_CDMatrix_2_2",
 ]
+
+colnames = [
+    "i_id",
+    "index",
+    "ra",
+    "dec",
+    "wsel",
+    "dwsel_dg1",
+    "dwsel_dg2",
+    "fpfs_e1",
+    "fpfs_de1_dg1",
+    "fpfs_de1_dg2",
+    "fpfs_e2",
+    "fpfs_de2_dg1",
+    "fpfs_de2_dg2",
+    "fpfs_m0",
+    "fpfs_dm0_dg1",
+    "fpfs_dm0_dg2",
+    "fpfs_m2",
+    "fpfs_dm2_dg1",
+    "fpfs_dm2_dg2",
+    "e1_psf2",
+    "e2_psf2",
+    "e1_psf4",
+    "e2_psf4",
+    "fwhm_psf",
+    "noise_variance",
+    "flux",
+    "dflux_dg1",
+    "dflux_dg2",
+]
+
+
+# "g_flux",
+# "g_dflux_dg1",
+# "g_dflux_dg2",
+# "r_flux",
+# "r_dflux_dg1",
+# "r_dflux_dg2",
+# "i_flux",
+# "i_dflux_dg1",
+# "i_dflux_dg2",
+# "z_flux",
+# "z_dflux_dg1",
+# "z_dflux_dg2",
+# "y_flux",
+# "y_dflux_dg1",
+# "y_dflux_dg2",
 
 
 def parse_args():
@@ -66,56 +104,154 @@ def split_work(data, size, rank):
     return data[rank::size]
 
 
-def process_patch(entry, skymap, task, comm):
+def process_patch(entry, skymap, task):
     tract_id = entry["tract"]
     patch_db = entry["patch"]
     patch_x = patch_db // 100
     patch_y = patch_db % 100
     patch_id = patch_x + patch_y * 9
 
-    bdir = "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/database/"
-    outdir = f"{bdir}/s23b-anacal/tracts/{tract_id}/{patch_id}"
-    force_fname = os.path.join(outdir, "force.fits")
-    out_fname = os.path.join(outdir, "match.fits")
-    if os.path.isfile(out_fname) or (not os.path.isfile(force_fname)):
-        print(out_fname)
+    out_dir = f"{os.environ['s23b_anacal']}/{tract_id}/{patch_id}"
+    out_fname = os.path.join(out_dir, "match.fits")
+    if os.path.isfile(out_fname):
         return None
 
-    cat_dir = "/lustre/HSC_DR/hsc_ssp/dr4/s23b/data/s23b_wide/unified/deepCoadd_meas"
-    dm_catalog = []
-    for band in ["g", "r", "i", "z", "y"]:
-        files = glob.glob(os.path.join(cat_dir, f"{tract_id}/{patch_id}/{band}/*"))
-        cat = rfn.repack_fields(fitsio.read(files[0])[dm_colnames])
-        map_dict = {name: f"{band}_" + name for name in dm_colnames}
-        dm_catalog.append(rfn.rename_fields(cat, map_dict))
-        del cat, map_dict
-    dm_catalog = rfn.merge_arrays(dm_catalog, flatten=True)
+    det_fname = os.path.join(out_dir, "detect.fits")
+    cat_dir = f"{os.environ['s23b_meas']}/{tract_id}/{patch_id}/i"
+    files = glob.glob(os.path.join(cat_dir, "*.fits"))
+    cat = SourceCatalog.readFits(files[0])
+    mask = cat["detect_isPrimary"]
+    cat = rfn.repack_fields(
+        cat.asAstropy().as_array()[dm_colnames][mask]
+    )
+    map_dict = {name: "i_" + name for name in dm_colnames}
+    cat = rfn.rename_fields(cat, map_dict)
+    del map_dict
 
-    catalog = fitsio.read(force_fname)
-    out = task.run(
+    catalog = np.array(fitsio.read(det_fname))
+    fpfs_fname = os.path.join(out_dir, "fpfs.fits")
+    tmp = np.array(fitsio.read(fpfs_fname))
+    catalog["fpfs_e1"] = tmp["fpfs1_e1"]
+    catalog["fpfs_de1_dg1"] = tmp["fpfs1_de1_dg1"]
+    catalog["fpfs_e2"] = tmp["fpfs1_e2"]
+    catalog["fpfs_de2_dg2"] = tmp["fpfs1_de2_dg2"]
+    del tmp
+    index = np.arange(len(catalog))
+    catalog = rfn.append_fields(
+        catalog, names="index", data=index, dtypes="i4", usemask=False
+    )
+
+    catalog = task.run(
         skyMap=skymap,
         tract=tract_id,
         patch=patch_id,
         catalog=catalog,
-        dm_catalog=dm_catalog,
+        dm_catalog=cat,
         truth_catalog=None,
-    )
-    fitsio.write(out_fname, out.catalog)
-    del dm_catalog, catalog
+    ).catalog
+    del cat
 
+    pixel_scale = 0.168
+    ff = (180 / np.pi) * 3600 / pixel_scale
+    j11 = catalog["i_base_LocalWcs_CDMatrix_1_1"] * ff * -1
+    j12 = catalog["i_base_LocalWcs_CDMatrix_1_2"] * ff
+    j21 = catalog["i_base_LocalWcs_CDMatrix_2_1"] * ff * -1
+    j22 = catalog["i_base_LocalWcs_CDMatrix_2_2"] * ff
+    kappa = (j11 + j22) / 2.0 - 1
+    ff2 = 1.0 / (1 + kappa)
+    j11 = j11 * ff2
+    j12 = j12 * ff2
+    j21 = j21 * ff2
+    j22 = j22 * ff2
+    rho = (j11 + j22) / 2.0
+    g1 = (j11 - j22) / 2.0
+    g2 = (j12 + j21) / 2.0
+    catalog["fpfs_e1"] = catalog["fpfs_e1"] + g1 * catalog["fpfs_de1_dg1"]
+    catalog["fpfs_e2"] = -catalog["fpfs_e2"] + g2 * catalog["fpfs_de2_dg2"]
+
+    psf_mxx = catalog["i_ext_shapeHSM_HsmPsfMoments_xx"] * pixel_scale**2
+    psf_myy = catalog["i_ext_shapeHSM_HsmPsfMoments_yy"] * pixel_scale**2
+    psf_mxy = catalog["i_ext_shapeHSM_HsmPsfMoments_xy"] * pixel_scale**2
+    psf_fwhm = 2.355 * (psf_mxx * psf_myy - psf_mxy**2)**0.25
+    e1_psf2 = (psf_mxx - psf_myy) / (psf_mxx + psf_myy)
+    e2_psf2 = psf_mxy / (psf_mxx + psf_myy) * -2.0
+    e1_psf4 = (
+        catalog["i_ext_shapeHSM_HigherOrderMomentsPSF_40"] -
+        catalog["i_ext_shapeHSM_HigherOrderMomentsPSF_04"]
+    )
+    e2_psf4 = -2.0 * (
+        catalog["i_ext_shapeHSM_HigherOrderMomentsPSF_31"] +
+        catalog["i_ext_shapeHSM_HigherOrderMomentsPSF_13"]
+    )
+    noise_variance = catalog["i_base_Variance_value"]
+    catalog = rfn.append_fields(
+        catalog,
+        names=[
+            "e1_psf2", "e2_psf2", "e1_psf4", "e2_psf4", "fwhm_psf",
+            "noise_variance"
+        ],
+        data=[e1_psf2, e2_psf2, e1_psf4, e2_psf4, psf_fwhm, noise_variance],
+        dtypes=["f4"] * 6,
+        usemask=False,
+    )
+
+
+    calexp_dir = f"{os.environ['s23b_calexp']}/{tract_id}/{patch_id}/i"
+    exp_fname = glob.glob(os.path.join(calexp_dir, "*.fits"))[0]
+    bbox = ExposureF.readFits(exp_fname).getBBox()
+    begin_x = bbox.beginX
+    begin_y = bbox.beginY
+    del bbox
+    x = np.int_(catalog["x1_det"] / pixel_scale - begin_x)
+    y = np.int_(catalog["x2_det"] / pixel_scale - begin_y)
+    inputs = {}
+    for band in ["g", "r", "i", "z", "y"]:
+        nim_dir = f"{os.environ['s23b_nimg']}/{tract_id}/{patch_id}/{band}"
+        nim_fname = glob.glob(os.path.join(nim_dir, "*.fits"))[0]
+        nimg = fitsio.read(nim_fname)
+        inputs[band] = nimg[y, x]
+    mask = (
+        (inputs["g"] >=2) &
+        (inputs["r"] >=2) &
+        (inputs["i"] >=3) &
+        (inputs["z"] >=2) &
+        (inputs["y"] >=2)
+    )
+    catalog = rfn.repack_fields(
+        catalog[colnames][mask]
+    )
+    catalog = rfn.rename_fields(
+        catalog,
+        {
+            "i_id": "object_id",
+            "fpfs_e1": "e1",
+            "fpfs_de1_dg1": "de1_dg1",
+            "fpfs_de1_dg2": "de1_dg2",
+            "fpfs_e2": "e2",
+            "fpfs_de2_dg1": "de2_dg1",
+            "fpfs_de2_dg2": "de2_dg2",
+            "fpfs_m0": "m0",
+            "fpfs_dm0_dg1": "dm0_dg1",
+            "fpfs_dm0_dg2": "dm0_dg2",
+            "fpfs_m2": "m2",
+            "fpfs_dm2_dg1": "dm2_dg1",
+            "fpfs_dm2_dg2": "dm2_dg2",
+        }
+    )
+    fitsio.write(out_fname, catalog)
+    del catalog
     return
 
 
 def main():
     args = parse_args()
-
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     size = comm.Get_size()
 
     if rank == 0:
         full = fitsio.read(
-            "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/left.fits"
+            "tracts_fdfc_v1_trim6.fits"
         )
         selected = full[args.start : args.end]
     else:
@@ -137,7 +273,7 @@ def main():
 
     pbar = tqdm(total=len(my_entries), desc=f"Rank {rank}", position=rank)
     for entry in my_entries:
-        process_patch(entry, skymap, task, comm)
+        process_patch(entry, skymap, task)
         gc.collect()
         pbar.update(1)
     pbar.close()

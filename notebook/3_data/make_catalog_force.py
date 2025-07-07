@@ -68,7 +68,7 @@ def read_files(tract_id, patch_id, band):
     }
 
 
-def process_patch(entry, skymap, task, comm, noise_corr):
+def process_patch(entry, skymap, task, noise_corr):
     tract_id = entry["tract"]
     patch_db = entry["patch"]
     patch_x = patch_db // 100
@@ -131,7 +131,7 @@ def main():
 
     if rank == 0:
         full = fitsio.read(
-            "/lustre/work/xiangchong.li/work/hsc_s23b_data/catalogs/tracts_fdfc_v1_trim6.fits"
+            "tracts_fdfc_v1_trim6.fits"
         )
         selected = full[args.start: args.end]
     else:
@@ -155,10 +155,10 @@ def main():
     task = AnacalForcePipe(config=config)
 
     noise_corr = fitsio.read(
-        "/lustre/work/xiangchong.li/superonionIDark/code/image/HSC_S23B_Shapes/notebook/3_data/noise_correlation.fits"
+        "noise_correlation2.fits"
     )
     for entry in my_entries:
-        process_patch(entry, skymap, task, comm, noise_corr)
+        process_patch(entry, skymap, task, noise_corr)
     return
 
 

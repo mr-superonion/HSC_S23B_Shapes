@@ -20,20 +20,11 @@ from numpy.lib import recfunctions as rfn
 
 dm_colnames = [
     "deblend_nChild",
-    "deblend_blendedness",
     "deblend_peak_center_x",
     "deblend_peak_center_y",
-    "base_Blendedness_abs",
-    "base_CircularApertureFlux_3_0_instFlux",
-    "base_CircularApertureFlux_3_0_instFluxErr",
+    "base_Variance_value",
     "base_GaussianFlux_instFlux",
     "base_GaussianFlux_instFluxErr",
-    "base_PsfFlux_instFlux",
-    "base_PsfFlux_instFluxErr",
-    "base_Variance_value",
-    "modelfit_CModel_instFlux",
-    "modelfit_CModel_instFluxErr",
-    "base_ClassificationExtendedness_value",
     "ext_shapeHSM_HsmPsfMoments_xx",
     "ext_shapeHSM_HsmPsfMoments_yy",
     "ext_shapeHSM_HsmPsfMoments_xy",
@@ -71,8 +62,8 @@ def compute_e_psf_2(catalog, e1, e2, r1, r2, pixel_scale=0.168):
     psf_myy = catalog["i_ext_shapeHSM_HsmPsfMoments_yy"] * pixel_scale**2
     psf_mxy = catalog["i_ext_shapeHSM_HsmPsfMoments_xy"] * pixel_scale**2
 
-    e1_psf = (psf_mxx - psf_myy) / (psf_mxx + psf_myy) / 2
-    e2_psf = psf_mxy / (psf_mxx + psf_myy)
+    e1_psf = (psf_mxx - psf_myy) / (psf_mxx + psf_myy)
+    e2_psf = psf_mxy / (psf_mxx + psf_myy) * 2.0
 
     bins = np.linspace(-0.06, 0.06, nbins + 1)
     bc = 0.5 * (bins[:-1] + bins[1:])
@@ -93,7 +84,7 @@ def compute_e_psf_4(catalog, e1, e2, r1, r2):
         catalog["i_ext_shapeHSM_HigherOrderMomentsPSF_13"]
     )
 
-    bins = np.linspace(-0.03, 0.03, nbins + 1)
+    bins = np.linspace(-0.02, 0.02, nbins + 1)
     e_psf_4 = 0.5 * (bins[:-1] + bins[1:])
     nom3 = np.histogram(e1_psf4, weights=e1, bins=bins)[0]
     denom3 = np.histogram(e1_psf4, weights=r1, bins=bins)[0]
@@ -108,7 +99,7 @@ def compute_size(catalog, e1, e2, r1, r2, pixel_scale=0.168):
     psf_mxy = catalog["i_ext_shapeHSM_HsmPsfMoments_xy"] * pixel_scale**2
     size_val = 2.355 * (psf_mxx * psf_myy - psf_mxy**2)**0.25
 
-    bins = np.linspace(0.45, 0.75, nbins + 1)
+    bins = np.linspace(0.5, 0.7, nbins + 1)
     bc = 0.5 * (bins[:-1] + bins[1:])
     nom5 = np.histogram(size_val, weights=e1, bins=bins)[0]
     denom5 = np.histogram(size_val, weights=r1, bins=bins)[0]
@@ -119,7 +110,7 @@ def compute_size(catalog, e1, e2, r1, r2, pixel_scale=0.168):
 
 def compute_variance(catalog, e1, e2, r1, r2):
     var_val = catalog["i_base_Variance_value"]
-    bins = np.linspace(0.002, 0.008, nbins + 1)
+    bins = np.linspace(0.002, 0.007, nbins + 1)
     var = 0.5 * (bins[:-1] + bins[1:])
     nom7 = np.histogram(var_val, weights=e1, bins=bins)[0]
     denom7 = np.histogram(var_val, weights=r1, bins=bins)[0]
@@ -166,7 +157,8 @@ def process_patch(entry, skymap, task, comm):
     ).catalog
     del dm_catalog, anacal_catalog
     mag = 27.0 - 2.5 * np.log10(catalog["flux"])
-    mask = (catalog["mask_value"] < 10) & (mag < 25.0)
+    abse = np.sqrt(catalog["fpfs_e1"] ** 2.0 + catalog["fpfs_e2"] ** 2.0)
+    mask = (catalog["mask_value"] < 25) & (mag < 25.0) & (abse < 0.3)
     catalog = catalog[mask]
 
     e1 = catalog["fpfs_e1"] * catalog["wsel"]

@@ -62,8 +62,11 @@ class HscQuery():
     def run(self):
         tracts = ascii.read(self.tractname)["tract"]
         for tt in tracts:
-            print("Tract: %s" % tt)
-            self.download_tract(tt)
+            outfname = "%s.fits" % str(tt)
+            outfname = os.path.join(prefix, outfname)
+            if not os.path.isfile(outfname):
+                print("Tract: %s" % tt)
+                self.download_tract(tt)
 
     def download_tract(self, tname):
         job = None

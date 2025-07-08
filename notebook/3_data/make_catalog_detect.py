@@ -48,19 +48,22 @@ def read_files(tract_id, patch_id):
     nim_dir = f"{os.environ['s23b_nimg']}/{tract_id}/{patch_id}/i"
     nim_fname = glob.glob(os.path.join(nim_dir, "*.fits"))[0]
     bmask = (bmask | (fitsio.read(nim_fname) <=2).astype(np.int16))
+    corr_fname = f"{os.environ['s23b_noisecorr']}/{tract_id}.fits"
+    noise_corr = fitsio.read(corr_fname)
     return {
         "exposure": exposure,
         "mask": bmask,
+        "noise_corr": noise_corr,
     }
 
 
-def process_patch(entry, skymap, task, comm, noise_corr):
+def process_patch(entry, skymap, task, noise_corr):
     tract_id = entry["tract"]
     patch_db = entry["patch"]
     patch_x = patch_db // 100
     patch_y = patch_db % 100
     patch_id = patch_x + patch_y * 9
-    out_dir = f"{os.environ['s23b_anacal']}/{tract_id}/{patch_id}"
+    out_dir = f"{os.environ['s23b_anacal2']}/{tract_id}/{patch_id}"
     out_fname = os.path.join(out_dir, "detect.fits")
     if os.path.isfile(out_fname):
         return None
@@ -74,7 +77,7 @@ def process_patch(entry, skymap, task, comm, noise_corr):
     data = task.anacal.prepare_data(
         exposure=res["exposure"],
         seed=seed,
-        noise_corr=noise_corr,
+        noise_corr=res["noise_corr"],
         detection=None,
         band=None,
         skyMap=skymap,
@@ -106,7 +109,7 @@ def main():
 
     if rank == 0:
         full = fitsio.read(
-            "tracts_fdfc_v1_trim6.fits"
+            "tracts_fdfc_v1_final.fits"
         )
         selected = full[args.start: args.end]
         if args.field != "all":
@@ -139,7 +142,7 @@ def main():
     # Initialize tqdm progress bar for this rank
     pbar = tqdm(total=len(my_entries), desc=f"Rank {rank}", position=rank)
     for entry in my_entries:
-        process_patch(entry, skymap, task, comm, noise_corr)
+        process_patch(entry, skymap, task, noise_corr)
         gc.collect()
         pbar.update(1)
     pbar.close()

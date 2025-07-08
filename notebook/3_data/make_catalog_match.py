@@ -111,7 +111,7 @@ def process_patch(entry, skymap, task):
     patch_y = patch_db % 100
     patch_id = patch_x + patch_y * 9
 
-    out_dir = f"{os.environ['s23b_anacal']}/{tract_id}/{patch_id}"
+    out_dir = f"{os.environ['s23b_anacal2']}/{tract_id}/{patch_id}"
     out_fname = os.path.join(out_dir, "match.fits")
     if os.path.isfile(out_fname):
         return None
@@ -251,7 +251,7 @@ def main():
 
     if rank == 0:
         full = fitsio.read(
-            "tracts_fdfc_v1_trim6.fits"
+            "tracts_fdfc_v1_final.fits"
         )
         selected = full[args.start : args.end]
     else:

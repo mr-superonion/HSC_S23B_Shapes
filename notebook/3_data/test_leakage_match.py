@@ -90,10 +90,10 @@ def process_patch(entry):
     patch_y = patch_db % 100
     patch_id = patch_x + patch_y * 9
 
-    out_dir1 = f"{os.environ['s23b_anacal']}/{tract_id}/{patch_id}"
+    out_dir1 = f"{os.environ['s23b_anacal2']}/{tract_id}/{patch_id}"
     out_fname1 = os.path.join(out_dir1, "leakage2.fits")
 
-    match_dir = f"{os.environ['s23b_anacal']}/{tract_id}/{patch_id}"
+    match_dir = out_dir1
     fname = os.path.join(match_dir, "match.fits")
     catalog = np.array(fitsio.read(fname))
     mag = 27.0 - 2.5 * np.log10(catalog["flux"])
@@ -140,7 +140,7 @@ def process_patch(entry):
         )
         out.write(out_fname1)
 
-    out_dir2 = f"{os.environ['s23b_anacal']}/summary"
+    out_dir2 = f"{os.environ['s23b_anacal2']}/summary"
     sum_e1 = np.sum(e1)
     sum_e2 = np.sum(e2)
     sum_r1 = np.sum(r1)
@@ -174,7 +174,7 @@ def main():
 
     if rank == 0:
         full = fitsio.read(
-            "./tracts_fdfc_v1_trim6.fits"
+            "./tracts_fdfc_v1_final.fits"
         )
         selected = full[args.start: args.end]
         if args.field != "all":

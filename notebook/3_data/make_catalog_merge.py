@@ -93,7 +93,6 @@ def main():
         if out is not None:
             if len(out) > 2:
                 data.append(out)
-            print(len(out))
         pbar.update(1)
 
     data = rfn.stack_arrays(data, usemask=False)
@@ -116,7 +115,7 @@ def main():
                 d_all.append(
                     fitsio.read(fn)
                 )
-                os.popen(f"rm {fn}")
+                os.remove(fn)
         fitsio.write(
             os.path.join(base_dir2, f"{field}.fits"),
             rfn.stack_arrays(d_all, usemask=False),

@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import numpy as np
 from tqdm import tqdm
 
 import fitsio
@@ -57,13 +58,27 @@ def process_patch(entry):
 
     base_dir = f"{os.environ['s23b_anacal2']}/{tract_id}/{patch_id}"
     fname = os.path.join(base_dir, "match.fits")
-    if os.path.isfile(fname):
+    fname2 = os.path.join(base_dir, "force.fits")
+    if os.path.isfile(fname) and os.path.isfile(fname2):
         dd = fitsio.read(fname)
-        dd = dd[dd["wsel"] > 1e-7]
+        dd2 = fitsio.read(fname2)
+        sel = (dd["wsel"] > 1e-7)
+        dd = dd[sel]
+        dd["dflux_dg2"] = -dd["dflux_dg2"]
+        dd["dwsel_dg2"] = -dd["dwsel_dg2"]
+        dd["dm0_dg2"] = -dd["dm0_dg2"]
+        dd["dm2_dg2"] = -dd["dm2_dg2"]
+        dd2 = dd2[sel]
+        dd2["g_dflux_dg2"] = -dd2["g_dflux_dg2"]
+        dd2["r_dflux_dg2"] = -dd2["r_dflux_dg2"]
+        dd2["i_dflux_dg2"] = -dd2["i_dflux_dg2"]
+        dd2["z_dflux_dg2"] = -dd2["z_dflux_dg2"]
+        dd2["y_dflux_dg2"] = -dd2["y_dflux_dg2"]
         dd = rfn.repack_fields(
             dd[colnames]
         )
-        return dd
+        dd2 = rfn.repack_fields(dd2)
+        return rfn.merge_arrays([dd, dd2], usemask=False, flatten=True)
     else:
         return None
 
@@ -97,9 +112,9 @@ def main():
 
     data = rfn.stack_arrays(data, usemask=False)
     field = args.field
-    base_dir2 = os.environ['s23b_anacal2']
+    out_dir = os.path.join(os.environ['s23b_anacal2'], "fields")
     fitsio.write(
-        os.path.join(base_dir2, f"{field}_{rank}.fits"),
+        os.path.join(out_dir, f"{field}_{rank}.fits"),
         data,
     )
     pbar.close()
@@ -107,18 +122,21 @@ def main():
 
     if rank == 0:
         field = args.field
-        base_dir2 = os.environ['s23b_anacal2']
+        out_dir = os.path.join(os.environ['s23b_anacal2'], "fields")
         d_all = []
-        fnames = glob.glob(os.path.join(base_dir2, f"{field}_*.fits"))
+        fnames = glob.glob(os.path.join(out_dir, f"{field}_*.fits"))
         for fn in fnames:
             if os.path.isfile(fn):
                 d_all.append(
                     fitsio.read(fn)
                 )
                 os.remove(fn)
+        outcome = rfn.stack_arrays(d_all, usemask=False)
+        order = np.argsort(outcome["object_id"])
+        outcome = outcome[order]
         fitsio.write(
-            os.path.join(base_dir2, f"{field}.fits"),
-            rfn.stack_arrays(d_all, usemask=False),
+            os.path.join(out_dir, f"{field}.fits"),
+            outcome,
         )
     return
 

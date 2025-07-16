@@ -27,9 +27,9 @@ def split_work(data, size, rank):
     return data[rank::size]
 
 
-def process_patch(tract_id, skymap, patch_list):
+def process_tract(tract_id, skymap, patch_list):
     fname = os.path.join(
-        os.environ["s23b"], "db_stars", f"{tract_id}.fits"
+        os.environ["s23b"], "db_color", f"{tract_id}.fits"
     )
     data = np.array(fitsio.read(fname))
     mask = np.isin(data["patch"], patch_list)
@@ -37,9 +37,31 @@ def process_patch(tract_id, skymap, patch_list):
         data[mask]
     )
     out_fname = os.path.join(
-        os.environ["s23b"], "db_stars", f"tmp_{tract_id}.fits"
+        os.environ["s23b"], "db_color", "fields", f"tmp_{tract_id}.fits"
     )
-    fitsio.write(out_fname, data)
+
+    out = []
+    for patch_db in patch_list:
+        patch_x = patch_db // 100
+        patch_y = patch_db % 100
+        patch_id = patch_x + patch_y * 9
+        shape_dir = f"{os.environ['s23b_anacal2']}/{tract_id}/{patch_id}"
+        fname = os.path.join(shape_dir, "match.fits")
+        dd = fitsio.read(fname)
+        dd = dd[dd["wsel"] > 1e-7]
+        sub = data[data["patch"] == patch_db]
+        # Match on "object_id"
+        common_ids, sub_idx, _ = np.intersect1d(
+            sub["object_id"], dd["object_id"], return_indices=True
+        )
+        assert len(common_ids) == len(dd)
+        out.append(sub[sub_idx])
+
+    if out:
+        fitsio.write(
+            out_fname,
+            rfn.stack_arrays(out, usemask=False),
+        )
     # tract_info = skymap[tract_id]
     # wcs = tract_info.getWcs()
     # for patch_db in patch_list:
@@ -83,7 +105,7 @@ def main():
     pbar = tqdm(total=len(tract_list), desc=f"Rank {rank}", position=rank)
     for tract_id in tract_list:
         patch_list = full["patch"][full["tract"] == tract_id]
-        process_patch(tract_id, skymap, patch_list)
+        process_tract(tract_id, skymap, patch_list)
         gc.collect()
         pbar.update(1)
     pbar.close()
@@ -92,7 +114,7 @@ def main():
     if rank == 0:
         field = args.field
         out_dir = os.path.join(
-            os.environ["s23b"], "db_stars",
+            os.environ["s23b"], "db_color", "fields",
         )
         d_all = []
         fnames = glob.glob(os.path.join(out_dir, "tmp_*.fits"))
@@ -102,9 +124,12 @@ def main():
                     fitsio.read(fn)
                 )
                 os.remove(fn)
+        outcome = rfn.stack_arrays(d_all, usemask=False)
+        order = np.argsort(outcome["object_id"])
+        outcome = outcome[order]
         fitsio.write(
             os.path.join(out_dir, f"{field}.fits"),
-            rfn.stack_arrays(d_all, usemask=False),
+            outcome,
         )
     return
 

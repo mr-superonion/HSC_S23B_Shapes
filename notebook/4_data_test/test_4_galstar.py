@@ -55,7 +55,7 @@ def prepare_catalogs():
         "spring1", "spring2", "spring3", "autumn1", "autumn2", "hectomap"
     ]
     for field in field_list:
-        fname = f"/gpfs02/work/xiangchong.li/work/hsc_data/s23b/db_star/fields/{field}.fits"
+        fname = f"{os.environ['s23b_db_star']}/fields/{field}.fits"
         data.append(fitsio.read(fname))
     data = rfn.stack_arrays(data, usemask=False)
     snr = data["i_psfflux_flux"] / data["i_psfflux_fluxerr"]
@@ -98,7 +98,7 @@ def prepare_catalogs():
         (~np.isnan(e1p4)) &
         (~np.isnan(e1s4)) &
         (data["i_calib_psf_reserved"]) &
-        (snr>250.0)
+        (snr>200.0)
     )
 
     ra = ra[msk]
@@ -156,49 +156,35 @@ def process_tract(tract_id, catalogs, inv_matrix):
     abse2 = data["e1"] ** 2.0 + data["e2"] ** 2.0
     mask = (
         (mag < 25.0) &
-        (abse2 < 0.09) &
-        (np.abs(data["dwsel_dg1"]) < 3000) &
-        (np.abs(data["dwsel_dg2"]) < 3000)
+        (abse2 < 0.09)
     )
     data = data[mask]
     shape = get_shape(data)
     del data
+    response = 0.24360357928500392
     cate = treecorr.Catalog(
-        g1=shape["e1"],
-        g2=-shape["e2"],
+        g1=shape["e1"] / response,
+        g2=-shape["e2"] / response,
         ra=shape["ra"],
         dec=shape["dec"],
         ra_units="deg",
         dec_units="deg",
     )
-    catk = treecorr.Catalog(
-        k=shape["res"],
-        ra=shape["ra"],
-        dec=shape["dec"],
-        ra_units="deg",
-        dec_units="deg",
-    )
-
     nbins = 12
-    out = {}
+    npairs = None
+    dd =[]
     for kk in catalogs.keys():
         cor1 = treecorr.GGCorrelation(
             nbins=nbins, min_sep=0.25, max_sep=360.0, sep_units="arcmin"
         )
-        cor2 = treecorr.NKCorrelation(
-            nbins=nbins, min_sep=0.25, max_sep=360.0, sep_units="arcmin"
-        )
         cor1.process(catalogs[kk], cate)
-        cor2.process(catalogs[kk], catk)
-        out[kk] = cor1.xip / cor2.xi
-    dd =[]
-    for kk in out.keys():
-        dd.append(out[kk])
+        npairs = cor1.npairs
+        dd.append(cor1.xip * cor1.npairs)
     dd = np.stack(dd).T
-    fff = np.zeros((len(dd), 4))
+    res = np.zeros((len(dd), 4))
     for i in range(nbins):
-        fff[i] = inv_matrix[i] @ dd[i]
-    return fff.T
+        res[i] = inv_matrix[i] @ dd[i]
+    return np.vstack([res.T, npairs])
 
 
 def main():
@@ -213,40 +199,31 @@ def main():
             "tracts.fits"
         )
         selected = full[args.start: args.end]
-        rho_inv_mat = fitsio.read("./")
+        rho_inv_mat = fitsio.read("./rho_mat_inv.fits")
     else:
         selected = None
+        rho_inv_mat = None
 
     selected = comm.bcast(selected, root=0)
+    rho_inv_mat = comm.bcast(rho_inv_mat, root=0)
     my_entries = split_work(selected, size, rank)
-    outcome = {
-        "alpha2": [],
-        "alpha4": [],
-        "beta2": [],
-        "beta4": [],
-    }
-    test_names = ["alpha2", "alpha4", "beta2", "beta4"]
-
+    outcome = []
     # Initialize tqdm progress bar for this rank
     pbar = tqdm(total=len(my_entries), desc=f"Rank {rank}", position=rank)
     catalogs = prepare_catalogs()
     for tract_id in my_entries:
-        out = process_tract(tract_id, catalogs)
-        for tt in test_names:
-            outcome[tt].append(out[tt])
+        outcome.append(
+            process_tract(tract_id, catalogs, rho_inv_mat)
+        )
         pbar.update(1)
     pbar.close()
 
-    gathered = {}
-    for tt in test_names:
-        per_rank = comm.gather(outcome[tt], root=0)
-        if rank == 0:
-            flat = [arr for sublist in per_rank for arr in sublist]
-            gathered[tt] = np.stack(flat)
+    gathered_results = comm.gather(outcome, root=0)
     if rank == 0:
-        for tt in test_names:
-            outfname = f"{os.environ['s23b_anacal2']}/psfstar_{tt}.fits"
-            fitsio.write(outfname, gathered[tt])
+        flat = [arr for sublist in gathered_results for arr in sublist]
+        gathered = np.stack(flat)
+        outfname = f"{os.environ['s23b_anacal2']}/psfstar.fits"
+        fitsio.write(outfname, gathered)
     comm.Barrier()
     return
 

@@ -27,7 +27,7 @@ def get_shape(catalog):
         "r2": r2,
     }
 
-def test_e_psf2(catalog, shape):
+def test_e_psf2_bin(catalog, shape):
     nbins = 5
     psf_mxx = catalog["i_hsmpsfmoments_shape11"]
     psf_myy = catalog["i_hsmpsfmoments_shape22"]
@@ -45,7 +45,7 @@ def test_e_psf2(catalog, shape):
     return np.stack([bc, nom1, denom1, nom2, denom2])
 
 
-def test_e_psf4(catalog, shape):
+def test_e_psf4_bin(catalog, shape):
     nbins = 5
     e1_psf4 = (
         catalog["i_higherordermomentspsf_40"] -
@@ -65,7 +65,7 @@ def test_e_psf4(catalog, shape):
     return np.stack([bc, nom3, denom3, nom4, denom4])
 
 
-def test_size(catalog, shape):
+def test_size_bin(catalog, shape):
     nbins = 5
     psf_mxx = catalog["i_hsmpsfmoments_shape11"]
     psf_myy = catalog["i_hsmpsfmoments_shape22"]
@@ -81,9 +81,9 @@ def test_size(catalog, shape):
     return np.stack([bc, nom5, denom5, nom6, denom6])
 
 
-def test_variance(catalog, shape):
+def test_variance_bin(catalog, shape, band="i"):
     nbins = 5
-    var_val = catalog["i_variance_value"]
+    var_val = catalog[f"{band}_variance_value"]
     bins = np.linspace(0.002, 0.007, nbins + 1)
     bc = 0.5 * (bins[:-1] + bins[1:])
     nom7 = np.histogram(var_val, weights=shape["e1"], bins=bins)[0]
@@ -92,7 +92,7 @@ def test_variance(catalog, shape):
     denom8 = np.histogram(var_val, weights=shape["r2"], bins=bins)[0]
     return np.stack([bc, nom7, denom7, nom8, denom8])
 
-def test_color(data, shape, ctype="gr"):
+def test_color_bin(data, shape, ctype="gr"):
     nbins = 5
     if ctype=="gr":
         mag_g = 27 - 2.5*np.log10(data["g_flux"])
@@ -163,14 +163,14 @@ def process_tract(tract_id):
     color = color[mask]
 
     shape = get_shape(data)
-    psf2 = test_e_psf2(color, shape)
-    psf4 = test_e_psf4(color, shape)
-    var = test_variance(color, shape)
-    size = test_size(color, shape)
-    gr = test_color(data, shape, "gr")
-    ri = test_color(data, shape, "ri")
-    iz = test_color(data, shape, "iz")
-    zy = test_color(data, shape, "zy")
+    psf2 = test_e_psf2_bin(color, shape)
+    psf4 = test_e_psf4_bin(color, shape)
+    var = test_variance_bin(color, shape)
+    size = test_size_bin(color, shape)
+    gr = test_color_bin(data, shape, "gr")
+    ri = test_color_bin(data, shape, "ri")
+    iz = test_color_bin(data, shape, "iz")
+    zy = test_color_bin(data, shape, "zy")
     return {
         "psf2": psf2,
         "psf4": psf4,

@@ -4,7 +4,15 @@ SELECT
 , meas.patch
 , meas.i_ra
 , meas.i_dec
+, meas.g_variance_value
+, meas.r_variance_value
 , meas.i_variance_value
+, meas.i_variance_value
+, meas.z_variance_value
+, meas.y_variance_value
+, meas2.i_sdssshape_shape11
+, meas2.i_sdssshape_shape12
+, meas2.i_sdssshape_shape22
 
 , meas.g_cmodel_mag
 , meas.g_cmodel_magerr

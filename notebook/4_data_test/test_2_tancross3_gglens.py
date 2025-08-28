@@ -8,7 +8,6 @@ from tqdm import tqdm
 
 import fitsio
 from mpi4py import MPI
-import astropy.io.ascii as pyascii
 
 
 def get_shape(catalog):
@@ -22,13 +21,22 @@ def get_shape(catalog):
         catalog["de2_dg2"] * catalog["wsel"] +
         catalog["dwsel_dg2"] * catalog["e2"]
     )
-    return {
-        "e1": e1,
-        "e2": e2,
-        "res": (r1 + r2) / 2.0,
-        "ra": catalog["ra"],
-        "dec": catalog["dec"],
-    }
+    cate = treecorr.Catalog(
+        g1=e1,
+        g2=-e2,
+        ra=catalog["ra"],
+        dec=catalog["dec"],
+        ra_units="deg",
+        dec_units="deg",
+    )
+    catk = treecorr.Catalog(
+        k=(r1 + r2) / 2.0,
+        ra=catalog["ra"],
+        dec=catalog["dec"],
+        ra_units="deg",
+        dec_units="deg",
+    )
+    return cate, catk
 
 
 # Parse command-line arguments
@@ -44,12 +52,11 @@ def parse_args():
     )
     return parser.parse_args()
 
-
 # Divide data among MPI ranks
 def split_work(data, size, rank):
     return data[rank::size]
 
-def compute_cluster(cate, catk, clusters):
+def compute_corr(cate, catk, points):
     cor1 = treecorr.NGCorrelation(
         nbins=20, min_sep=0.25, max_sep=360.0, sep_units="arcmin"
     )
@@ -57,8 +64,8 @@ def compute_cluster(cate, catk, clusters):
         nbins=20, min_sep=0.25, max_sep=360.0, sep_units="arcmin"
     )
     cat0 = treecorr.Catalog(
-        ra=clusters["ra"],
-        dec=clusters["dec"],
+        ra=points["ra"],
+        dec=points["dec"],
         ra_units="deg",
         dec_units="deg",
     )
@@ -71,53 +78,7 @@ def compute_cluster(cate, catk, clusters):
         cor2.xi * cor1.npairs,
     ])
 
-def compute_tract(cate, catk, tracts):
-    cor1 = treecorr.NGCorrelation(
-        nbins=20, min_sep=0.25, max_sep=360.0, sep_units="arcmin"
-    )
-    cor2 = treecorr.NKCorrelation(
-        nbins=20, min_sep=0.25, max_sep=360.0, sep_units="arcmin"
-    )
-    cat0 = treecorr.Catalog(
-        ra=tracts["ra"],
-        dec=tracts["dec"],
-        ra_units="deg",
-        dec_units="deg",
-    )
-    cor1.process(cat0, cate)
-    cor2.process(cat0, catk)
-    return np.array([
-        cor1.rnom,
-        cor1.xi * cor1.npairs,
-        cor1.xi_im * cor1.npairs,
-        cor2.xi * cor1.npairs,
-    ])
-
-
-def compute_visit(cate, catk, visits):
-    cor1 = treecorr.NGCorrelation(
-        nbins=20, min_sep=0.25, max_sep=360.0, sep_units="arcmin"
-    )
-    cor2 = treecorr.NKCorrelation(
-        nbins=20, min_sep=0.25, max_sep=360.0, sep_units="arcmin"
-    )
-    cat0 = treecorr.Catalog(
-        ra=visits["ra"],
-        dec=visits["dec"],
-        ra_units="deg",
-        dec_units="deg",
-    )
-    cor1.process(cat0, cate)
-    cor2.process(cat0, catk)
-    return np.array([
-        cor1.rnom,
-        cor1.xi * cor1.npairs,
-        cor1.xi_im * cor1.npairs,
-        cor2.xi * cor1.npairs,
-    ])
-
-
-def process_tract(tract_id, clusters, tracts, visits):
+def process_tract(tract_id, lowz, cmass1, cmass2):
     fname1 = f"{os.environ['s23b_anacal3']}/tracts/{tract_id}.fits"
     data = fitsio.read(fname1)
     mag = 27.0 - 2.5 * np.log10(data["flux"])
@@ -125,30 +86,17 @@ def process_tract(tract_id, clusters, tracts, visits):
     mask = (
         (mag < 24.5) &
         (abse2 < 0.09)
+        # (np.abs(data["dwsel_dg1"]) < 3000) &
+        # (np.abs(data["dwsel_dg2"]) < 3000)
     )
     data = data[mask]
-    shape = get_shape(data)
+    cate, catk = get_shape(data)
     del data
-    cate = treecorr.Catalog(
-        g1=shape["e1"],
-        g2=-shape["e2"],
-        ra=shape["ra"],
-        dec=shape["dec"],
-        ra_units="deg",
-        dec_units="deg",
-    )
-    catk = treecorr.Catalog(
-        k=shape["res"],
-        ra=shape["ra"],
-        dec=shape["dec"],
-        ra_units="deg",
-        dec_units="deg",
-    )
 
     return {
-        "cluster": compute_cluster(cate, catk, clusters),
-        "tract": compute_tract(cate, catk, tracts),
-        "visit": compute_visit(cate, catk, visits),
+        "lowz": compute_corr(cate, catk, lowz),
+        "cmass1": compute_corr(cate, catk, cmass1),
+        "cmass2": compute_corr(cate, catk, cmass2),
     }
 
 
@@ -165,33 +113,33 @@ def main():
             f"{rootdir}/tracts_id.fits"
         )
         selected = full[args.start: args.end]
-        clusters = pyascii.read(f"{rootdir}/camira/camira_s23b_wide_v3.csv")
-        clusters = clusters[(clusters["N_mem"] > 12) & (clusters["z_cl"] < 1.5)]
-        tracts = fitsio.read(f"{rootdir}/tracts.fits", columns=["ra", "dec"])
-        visits = fitsio.read(f"{rootdir}/visits.fits", columns=["ra", "dec"])
+        bdir = os.path.join(rootdir, "boss_dr11")
+        lowz = fitsio.read(f"{bdir}/lowz.fits", columns=["ra", "dec"])
+        cmass1 = fitsio.read(f"{bdir}/cmass1.fits", columns=["ra", "dec"])
+        cmass2 = fitsio.read(f"{bdir}/cmass2.fits", columns=["ra", "dec"])
     else:
         selected = None
-        clusters = None
-        tracts = None
-        visits = None
+        lowz = None
+        cmass1 = None
+        cmass2 = None
 
     selected = comm.bcast(selected, root=0)
-    clusters = comm.bcast(clusters, root=0)
-    tracts = comm.bcast(tracts, root=0)
-    visits = comm.bcast(visits, root=0)
+    lowz = comm.bcast(lowz, root=0)
+    cmass1 = comm.bcast(cmass1, root=0)
+    cmass2 = comm.bcast(cmass2, root=0)
 
     my_entries = split_work(selected, size, rank)
     outcome = {
-        "cluster": [],
-        "visit": [],
-        "tract": [],
+        "lowz": [],
+        "cmass1": [],
+        "cmass2": [],
     }
     test_names = list(outcome.keys())
 
     # Initialize tqdm progress bar for this rank
     pbar = tqdm(total=len(my_entries), desc=f"Rank {rank}", position=rank)
     for tract_id in my_entries:
-        out = process_tract(tract_id, clusters, tracts, visits)
+        out = process_tract(tract_id, lowz, cmass1, cmass2)
         for tt in test_names:
             outcome[tt].append(out[tt])
         pbar.update(1)

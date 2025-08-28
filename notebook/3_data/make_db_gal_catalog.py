@@ -8,7 +8,6 @@ from tqdm import tqdm
 
 import fitsio
 import numpy as np
-from lsst.skymap.ringsSkyMap import RingsSkyMap, RingsSkyMapConfig
 from mpi4py import MPI
 from numpy.lib import recfunctions as rfn
 
@@ -27,17 +26,22 @@ def split_work(data, size, rank):
     return data[rank::size]
 
 
-def process_tract(tract_id, skymap, patch_list):
+def process_tract(field, tract_id, patch_list):
     fname = os.path.join(
         os.environ["s23b"], "db_color", f"{tract_id}.fits"
     )
     data = np.array(fitsio.read(fname))
+    data["i_higherordermomentspsf_13"] = -data["i_higherordermomentspsf_13"]
+    data["i_higherordermomentspsf_31"] = -data["i_higherordermomentspsf_31"]
     mask = np.isin(data["patch"], patch_list)
     data = rfn.repack_fields(
         data[mask]
     )
+
     out_fname = os.path.join(
-        os.environ["s23b"], "db_color", "fields", f"tmp_{tract_id}.fits"
+        os.environ["s23b_anacal3"],
+        "fields_color",
+        f"{field}_{tract_id}.fits",
     )
 
     out = []
@@ -45,10 +49,10 @@ def process_tract(tract_id, skymap, patch_list):
         patch_x = patch_db // 100
         patch_y = patch_db % 100
         patch_id = patch_x + patch_y * 9
-        shape_dir = f"{os.environ['s23b_anacal2']}/{tract_id}/{patch_id}"
+        shape_dir = f"{os.environ['s23b_anacal3']}/{tract_id}/{patch_id}"
         fname = os.path.join(shape_dir, "match.fits")
         dd = fitsio.read(fname)
-        dd = dd[dd["wsel"] > 1e-7]
+        dd = dd[dd["wsel"] > 1e-6]
         sub = data[data["patch"] == patch_db]
         # Match on "object_id"
         common_ids, sub_idx, _ = np.intersect1d(
@@ -58,19 +62,11 @@ def process_tract(tract_id, skymap, patch_list):
         out.append(sub[sub_idx])
 
     if out:
+        out = rfn.stack_arrays(out, usemask=False)
         fitsio.write(
             out_fname,
-            rfn.stack_arrays(out, usemask=False),
+            out,
         )
-    # tract_info = skymap[tract_id]
-    # wcs = tract_info.getWcs()
-    # for patch_db in patch_list:
-    #     patch_x = patch_db // 100
-    #     patch_y = patch_db % 100
-    #     patch_id = patch_x + patch_y * 9
-
-    #     patch_info = tract_info[patch_id]
-    #     bbox = patch_info.getOuterBBox()
     return
 
 
@@ -80,13 +76,15 @@ def main():
     rank = comm.Get_rank()
     size = comm.Get_size()
 
+    rootdir = os.environ["s23b"]
     full = fitsio.read(
-        "tracts_fdfc_v1_final.fits"
+        f"{rootdir}/tracts_fdfc_v1_final.fits"
     )
+    field = args.field
     if rank == 0:
         tract_all, idx = np.unique(full["tract"], return_index=True)
         field_list = full[idx]["field"]
-        mm = (field_list == args.field)
+        mm = (field_list == field)
         tract_all = tract_all[mm]
     else:
         tract_all = None
@@ -94,18 +92,10 @@ def main():
     tract_all = comm.bcast(tract_all, root=0)
     tract_list = split_work(tract_all, size, rank)
 
-    # Set up the configuration
-    config = RingsSkyMapConfig()
-    config.numRings = 120
-    config.projection = "TAN"
-    config.tractOverlap = 1.0 / 60  # degrees
-    config.pixelScale = 0.168  # arcsec/pixel
-    skymap = RingsSkyMap(config)
-
     pbar = tqdm(total=len(tract_list), desc=f"Rank {rank}", position=rank)
     for tract_id in tract_list:
         patch_list = full["patch"][full["tract"] == tract_id]
-        process_tract(tract_id, skymap, patch_list)
+        process_tract(field, tract_id, patch_list)
         gc.collect()
         pbar.update(1)
     pbar.close()
@@ -114,10 +104,11 @@ def main():
     if rank == 0:
         field = args.field
         out_dir = os.path.join(
-            os.environ["s23b"], "db_color", "fields",
+            os.environ["s23b_anacal3"],
+            "fields_color",
         )
         d_all = []
-        fnames = glob.glob(os.path.join(out_dir, "tmp_*.fits"))
+        fnames = glob.glob(os.path.join(out_dir, f"{field}_*.fits"))
         for fn in fnames:
             if os.path.isfile(fn):
                 d_all.append(

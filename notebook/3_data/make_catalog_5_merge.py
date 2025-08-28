@@ -3,12 +3,14 @@
 import argparse
 import os
 import numpy as np
-from tqdm import tqdm
+import healpy as hp
+import smatch
 
 import fitsio
 from mpi4py import MPI
 import numpy.lib.recfunctions as rfn
 import glob
+from lsst.skymap.ringsSkyMap import RingsSkyMap, RingsSkyMapConfig
 
 colnames = [
     "object_id",
@@ -49,20 +51,57 @@ def split_work(data, size, rank):
     return data[rank::size]
 
 
-def process_patch(entry):
+def process_patch(entry, hmask, stars, skymap):
     tract_id = entry["tract"]
     patch_db = entry["patch"]
     patch_x = patch_db // 100
     patch_y = patch_db % 100
     patch_id = patch_x + patch_y * 9
 
-    base_dir = f"{os.environ['s23b_anacal2']}/{tract_id}/{patch_id}"
+    patch_info = skymap[tract_id][patch_id]
+    wcs = patch_info.getWcs()
+    bbox = patch_info.getOuterBBox()
+    x, y = wcs.skyToPixelArray(
+        ra=stars["ra"],
+        dec=stars["dec"],
+        degrees=True,
+    )
+    mm = (
+        (x >= bbox.getBeginX()) &
+        (y >= bbox.getBeginY()) &
+        (x <  bbox.getEndX())   &
+        (y <  bbox.getEndY())
+    )
+    ss = stars[mm]
+
+    base_dir = f"{os.environ['s23b_anacal3']}/{tract_id}/{patch_id}"
     fname = os.path.join(base_dir, "match.fits")
     fname2 = os.path.join(base_dir, "force.fits")
+    NSIDE = 1024
+    radius_deg = 1.0 / 3600.0 # degrees
     if os.path.isfile(fname) and os.path.isfile(fname2):
-        dd = fitsio.read(fname)
+        dd = np.array(fitsio.read(fname))
+        pix = hp.ang2pix(
+            NSIDE,
+            np.deg2rad(90.0 - dd["dec"]),
+            np.deg2rad(dd["ra"]),
+            nest=True
+        )
+
+        matches = smatch.match(
+            ra1=ss["ra"], dec1=ss["dec"],
+            radius1=radius_deg,
+            ra2=dd["ra"], dec2=dd["dec"],
+            maxmatch=15,
+        )
+        mstar = np.ones(len(dd), dtype=bool)
+        i2 = matches["i2"]
+        i2_valid = i2[i2 >= 0]
+        if i2_valid.size > 0:
+            mstar[np.unique(i2_valid)] = False
+
         dd2 = fitsio.read(fname2)
-        sel = (dd["wsel"] > 1e-7)
+        sel = (dd["wsel"] > 1e-6) & (hmask[pix]) & (mstar)
         dd = dd[sel]
         dd["dflux_dg2"] = -dd["dflux_dg2"]
         dd["dwsel_dg2"] = -dd["dwsel_dg2"]
@@ -89,40 +128,55 @@ def main():
     rank = comm.Get_rank()
     size = comm.Get_size()
     if rank == 0:
+        rootdir = os.environ["s23b"]
         full = fitsio.read(
-            "tracts_fdfc_v1_final.fits"
+            f"{rootdir}/tracts_fdfc_v1_final.fits"
         )
         mm = full["field"] == args.field
         selected = full[mm]
-        print(len(selected))
+        hmask = hp.read_map(
+            f"{rootdir}/fdfc_hp_window.fits",
+            nest=True, dtype=bool
+        )
+        stars = np.array(fitsio.read(f"{rootdir}/gaia/stars.fits"))
+        stars = stars[(stars["g_mag"]<21.0) & (stars["g_mag"]>15.0)]
     else:
         selected = None
+        hmask = None
+        stars = None
+
+    # Set up the configuration
+    config = RingsSkyMapConfig()
+    config.numRings = 120
+    config.projection = "TAN"
+    config.tractOverlap = 1.0 / 60  # degrees
+    config.pixelScale = 0.168  # arcsec/pixel
+    skymap = RingsSkyMap(config)
 
     selected = comm.bcast(selected, root=0)
+    hmask = comm.bcast(hmask, root=0)
+    stars = comm.bcast(stars, root=0)
     my_entries = split_work(selected, size, rank)
 
     data = []
-    pbar = tqdm(total=len(my_entries), desc=f"Rank {rank}", position=rank)
     for entry in my_entries:
-        out = process_patch(entry)
+        out = process_patch(entry, hmask, stars, skymap)
         if out is not None:
             if len(out) > 2:
                 data.append(out)
-        pbar.update(1)
 
     data = rfn.stack_arrays(data, usemask=False)
     field = args.field
-    out_dir = os.path.join(os.environ['s23b_anacal2'], "fields")
+    out_dir = os.path.join(os.environ['s23b_anacal3'], "fields")
     fitsio.write(
         os.path.join(out_dir, f"{field}_{rank}.fits"),
         data,
     )
-    pbar.close()
     comm.Barrier()
 
     if rank == 0:
         field = args.field
-        out_dir = os.path.join(os.environ['s23b_anacal2'], "fields")
+        out_dir = os.path.join(os.environ['s23b_anacal3'], "fields")
         d_all = []
         fnames = glob.glob(os.path.join(out_dir, f"{field}_*.fits"))
         for fn in fnames:

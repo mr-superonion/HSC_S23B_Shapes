@@ -4,31 +4,11 @@ import argparse
 import os
 import treecorr
 import numpy as np
-from tqdm import tqdm
 
 import fitsio
 from mpi4py import MPI
 import numpy.lib.recfunctions as rfn
 
-
-def get_shape(catalog):
-    e1 = catalog["e1"] * catalog["wsel"]
-    e2 = catalog["e2"] * catalog["wsel"]
-    r1 = (
-        catalog["de1_dg1"] * catalog["wsel"] +
-        catalog["dwsel_dg1"] * catalog["e1"]
-    )
-    r2 = (
-        catalog["de2_dg2"] * catalog["wsel"] +
-        catalog["dwsel_dg2"] * catalog["e2"]
-    )
-    return {
-        "e1": e1,
-        "e2": e2,
-        "res": (r1 + r2) / 2.0,
-        "ra": catalog["ra"],
-        "dec": catalog["dec"],
-    }
 
 
 # Parse command-line arguments
@@ -97,8 +77,12 @@ def prepare_catalogs():
         (~np.isnan(e1s2)) &
         (~np.isnan(e1p4)) &
         (~np.isnan(e1s4)) &
+        (~np.isnan(e2p2)) &
+        (~np.isnan(e2s2)) &
+        (~np.isnan(e2p4)) &
+        (~np.isnan(e2s4)) &
         (data["i_calib_psf_reserved"]) &
-        (snr>200.0)
+        (snr>180.0)
     )
 
     ra = ra[msk]
@@ -149,42 +133,63 @@ def prepare_catalogs():
         "Q4": catQ4,
     }
 
-def process_tract(tract_id, catalogs, inv_matrix):
-    fname1 = f"{os.environ['s23b_anacal2']}/tracts/{tract_id}.fits"
-    data = fitsio.read(fname1)
-    mag = 27.0 - 2.5 * np.log10(data["flux"])
-    abse2 = data["e1"] ** 2.0 + data["e2"] ** 2.0
+def get_shape(fname1):
+    catalog = fitsio.read(fname1)
+    mag = 27.0 - 2.5 * np.log10(catalog["flux"])
+    abse2 = catalog["e1"] ** 2.0 + catalog["e2"] ** 2.0
     mask = (
-        (mag < 25.0) &
+        (mag < 24.5) &
         (abse2 < 0.09)
     )
-    data = data[mask]
-    shape = get_shape(data)
-    del data
-    response = 0.24360357928500392
+    catalog = catalog[mask]
+    e1 = catalog["e1"] * catalog["wsel"]
+    e2 = catalog["e2"] * catalog["wsel"]
+
+    r1 = (
+        catalog["de1_dg1"] * catalog["wsel"] +
+        catalog["dwsel_dg1"] * catalog["e1"]
+    )
+    r2 = (
+        catalog["de2_dg2"] * catalog["wsel"] +
+        catalog["dwsel_dg2"] * catalog["e2"]
+    )
+    response = (r1 + r2) / 2.0
     cate = treecorr.Catalog(
-        g1=shape["e1"] / response,
-        g2=-shape["e2"] / response,
-        ra=shape["ra"],
-        dec=shape["dec"],
+        g1=e1,
+        g2=-e2,
+        ra=catalog["ra"],
+        dec=catalog["dec"],
         ra_units="deg",
         dec_units="deg",
     )
+    catk = treecorr.Catalog(
+        k=response,
+        ra=catalog["ra"],
+        dec=catalog["dec"],
+        ra_units="deg",
+        dec_units="deg",
+    )
+    return cate, catk
+
+def process_tract(tract_id):
+    fname1 = f"{os.environ['s23b_anacal3']}/tracts/{tract_id}.fits"
+    cate, catk = get_shape(fname1)
     nbins = 12
-    npairs = None
+    catalogs = prepare_catalogs()
     dd =[]
-    for kk in catalogs.keys():
+    for kk in ["P2", "P4", "Q2", "Q4"]:
         cor1 = treecorr.GGCorrelation(
             nbins=nbins, min_sep=0.25, max_sep=360.0, sep_units="arcmin"
         )
+        cor2 = treecorr.NKCorrelation(
+            nbins=nbins, min_sep=0.25, max_sep=360.0, sep_units="arcmin"
+        )
         cor1.process(catalogs[kk], cate)
-        npairs = cor1.npairs
         dd.append(cor1.xip * cor1.npairs)
-    dd = np.stack(dd).T
-    res = np.zeros((len(dd), 4))
-    for i in range(nbins):
-        res[i] = inv_matrix[i] @ dd[i]
-    return np.vstack([res.T, npairs])
+        if kk =="Q4":
+            cor2.process(catalogs[kk], catk)
+            dd.append(cor2.xi * cor1.npairs)
+    return np.stack(dd)
 
 
 def main():
@@ -196,33 +201,25 @@ def main():
 
     if rank == 0:
         full = fitsio.read(
-            "tracts.fits"
+            f"{os.environ['s23b']}/tracts_id.fits"
         )
         selected = full[args.start: args.end]
-        rho_inv_mat = fitsio.read("./rho_mat_inv.fits")
     else:
         selected = None
-        rho_inv_mat = None
 
     selected = comm.bcast(selected, root=0)
-    rho_inv_mat = comm.bcast(rho_inv_mat, root=0)
     my_entries = split_work(selected, size, rank)
     outcome = []
-    # Initialize tqdm progress bar for this rank
-    pbar = tqdm(total=len(my_entries), desc=f"Rank {rank}", position=rank)
-    catalogs = prepare_catalogs()
     for tract_id in my_entries:
         outcome.append(
-            process_tract(tract_id, catalogs, rho_inv_mat)
+            process_tract(tract_id)
         )
-        pbar.update(1)
-    pbar.close()
 
     gathered_results = comm.gather(outcome, root=0)
     if rank == 0:
         flat = [arr for sublist in gathered_results for arr in sublist]
         gathered = np.stack(flat)
-        outfname = f"{os.environ['s23b_anacal2']}/psfstar.fits"
+        outfname = f"{os.environ['s23b_anacal3']}/tests/psfstar.fits"
         fitsio.write(outfname, gathered)
     comm.Barrier()
     return

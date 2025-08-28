@@ -54,9 +54,9 @@ def read_files(tract_id, patch_id, band):
     exp_fname = glob.glob(os.path.join(calexp_dir, "*.fits"))[0]
     exposure = afwImage.ExposureF.readFits(exp_fname)
     mask_dir = f"{os.environ['s23b_mask']}/{tract_id}/{patch_id}"
-    mask_fname = os.path.join(mask_dir, "mask2.fits")
+    mask_fname = os.path.join(mask_dir, "mask3.fits")
     bmask = fitsio.read(mask_fname)
-    nim_dir = f"{os.environ['s23b_nimg']}/{tract_id}/{patch_id}/{band}"
+    nim_dir = f"{os.environ['s23b_nimg']}/{tract_id}/{patch_id}/i/"
     nim_fname = glob.glob(os.path.join(nim_dir, "*.fits"))[0]
     bmask = (bmask | (fitsio.read(nim_fname) <=2).astype(np.int16))
     corr_fname = f"{os.environ['s23b_noisecorr']}/{tract_id}.fits"
@@ -68,14 +68,13 @@ def read_files(tract_id, patch_id, band):
     }
 
 
-def process_patch(entry, skymap, task, noise_corr):
+def process_patch(entry, skymap, task):
     tract_id = entry["tract"]
     patch_db = entry["patch"]
     patch_x = patch_db // 100
     patch_y = patch_db % 100
     patch_id = patch_x + patch_y * 9
-    print(tract_id, patch_id)
-    out_dir = f"{os.environ['s23b_anacal2']}/{tract_id}/{patch_id}"
+    out_dir = f"{os.environ['s23b_anacal3']}/{tract_id}/{patch_id}"
     out_fname = os.path.join(out_dir, "force.fits")
     if os.path.isfile(out_fname):
         return None
@@ -88,12 +87,6 @@ def process_patch(entry, skymap, task, noise_corr):
         detection = fitsio.read(det_fname)
         match = fitsio.read(mat_fname)
         detection = detection[match["index"]]
-        detection["a1"] = 0.3
-        detection["a2"] = 0.3
-        detection["da1_dg1"] = 0.0
-        detection["da1_dg2"] = 0.0
-        detection["da2_dg1"] = 0.0
-        detection["da2_dg2"] = 0.0
         detection = rfn.repack_fields(detection)
     except Exception:
         print(tract_id, patch_id, "cannot read det / match file")
@@ -123,9 +116,7 @@ def process_patch(entry, skymap, task, noise_corr):
 
     catalog = rfn.merge_arrays(catalog, flatten=True)
     fitsio.write(out_fname, catalog)
-
     return
-
 
 def main():
     args = parse_args()
@@ -135,8 +126,9 @@ def main():
     size = comm.Get_size()
 
     if rank == 0:
+        rootdir = os.environ["s23b"]
         full = fitsio.read(
-            "tracts_fdfc_v1_final.fits"
+            f"{rootdir}/tracts_fdfc_v1_final.fits"
         )
         selected = full[args.start: args.end]
         if args.field != "all":
@@ -157,16 +149,13 @@ def main():
     skymap = RingsSkyMap(config)
 
     config = AnacalForcePipeConfig()
+    config.size = 0.3
     config.anacal.force_size = True
     config.anacal.num_epochs = 8
     config.anacal.do_noise_bias_correction = True
     task = AnacalForcePipe(config=config)
-
-    noise_corr = fitsio.read(
-        "noise_correlation2.fits"
-    )
     for entry in my_entries:
-        process_patch(entry, skymap, task, noise_corr)
+        process_patch(entry, skymap, task)
     return
 
 

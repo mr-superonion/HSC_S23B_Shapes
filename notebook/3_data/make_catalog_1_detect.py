@@ -4,7 +4,6 @@ import argparse
 import gc
 import glob
 import os
-from tqdm import tqdm
 
 import fitsio
 import numpy as np
@@ -43,7 +42,7 @@ def read_files(tract_id, patch_id):
     exp_fname = glob.glob(os.path.join(calexp_dir, "*.fits"))[0]
     exposure = afwImage.ExposureF.readFits(exp_fname)
     mask_dir = f"{os.environ['s23b_mask']}/{tract_id}/{patch_id}"
-    mask_fname = os.path.join(mask_dir, "mask2.fits")
+    mask_fname = os.path.join(mask_dir, "mask3.fits")
     bmask = fitsio.read(mask_fname)
     nim_dir = f"{os.environ['s23b_nimg']}/{tract_id}/{patch_id}/i"
     nim_fname = glob.glob(os.path.join(nim_dir, "*.fits"))[0]
@@ -63,7 +62,7 @@ def process_patch(entry, skymap, task, noise_corr):
     patch_x = patch_db // 100
     patch_y = patch_db % 100
     patch_id = patch_x + patch_y * 9
-    out_dir = f"{os.environ['s23b_anacal2']}/{tract_id}/{patch_id}"
+    out_dir = f"{os.environ['s23b_anacal3']}/{tract_id}/{patch_id}"
     out_fname = os.path.join(out_dir, "detect.fits")
     if os.path.isfile(out_fname):
         return None
@@ -108,8 +107,9 @@ def main():
     size = comm.Get_size()
 
     if rank == 0:
+        rootdir = os.environ["s23b"]
         full = fitsio.read(
-            "tracts_fdfc_v1_final.fits"
+            f"{rootdir}/tracts_fdfc_v1_final.fits"
         )
         selected = full[args.start: args.end]
         if args.field != "all":
@@ -137,15 +137,11 @@ def main():
     task = AnacalDetectPipe(config=config)
 
     noise_corr = fitsio.read(
-        "noise_correlation2.fits"
+        "noise_correlation.fits"
     )
-    # Initialize tqdm progress bar for this rank
-    pbar = tqdm(total=len(my_entries), desc=f"Rank {rank}", position=rank)
     for entry in my_entries:
         process_patch(entry, skymap, task, noise_corr)
         gc.collect()
-        pbar.update(1)
-    pbar.close()
     return
 
 

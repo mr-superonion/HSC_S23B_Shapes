@@ -20,9 +20,6 @@ RANGES=(
     "35000 40000"
 )
 
-# Number of MPI ranks
-NPROC=16
-
 # Loop over ranges
 for range in "${RANGES[@]}"; do
     read START END <<< "$range"

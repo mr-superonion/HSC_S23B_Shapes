@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import argparse
+import healpy as hp
 
 import fitsio
 import numpy as np
@@ -26,31 +27,26 @@ def select_data(d, sel):
 def main():
     args = parse_args()
     field = args.field
-    rootdir = "/gpfs02/work/xiangchong.li/work/hsc_data/s23b/deepCoadd_anacal2"
-    outdir = f"{rootdir}/tracts/"
+    rootdir = "/gpfs02/work/xiangchong.li/work/hsc_data/s23b/deepCoadd_anacal3"
+    outdir = f"{rootdir}/healpix/"
     os.makedirs(outdir, exist_ok=True)
     fname = f"{rootdir}/fields/{field}.fits"
-    data = fitsio.read(fname)
-
-    rootdir2 = "/gpfs02/work/xiangchong.li/work/hsc_data/s23b/db_color"
-    outdir2 = f"{rootdir2}/tracts/"
-    os.makedirs(outdir2, exist_ok=True)
-    fname2 = f"{rootdir2}/fields/{field}.fits"
-    data2 = fitsio.read(fname2)
-
-    tract = data2["tract"]
-    tlist = np.unique(tract)
-    for tt in tlist:
+    data = np.array(fitsio.read(fname))
+    ra = data['ra']
+    dec = data['dec']
+    theta = np.deg2rad(90.0 - dec)
+    phi = np.deg2rad(ra)
+    # Convert to HEALPix pixel indices (in NESTED ordering)
+    pix = hp.ang2pix(128, theta, phi, nest=True)
+    plist = np.unique(pix)
+    for tt in plist:
         if os.path.isfile(f"{outdir}/{tt}.fits"):
             print(tt)
         else:
-            sel = (tract == tt)
+            sel = (pix == tt)
             out1 = select_data(data, sel)
             fitsio.write(f"{outdir}/{tt}.fits", out1)
             del out1
-            out2 = select_data(data2, sel)
-            fitsio.write(f"{outdir2}/{tt}.fits", out2)
-            del out2
     return
 
 

@@ -5,7 +5,6 @@ import gc
 import glob
 import numpy as np
 import os
-from tqdm import tqdm
 
 import fitsio
 import lsst.afw.image as afwImage
@@ -44,13 +43,13 @@ def read_files(tract_id, patch_id):
     exposure = afwImage.ExposureF.readFits(exp_fname)
 
     mask_dir = f"{os.environ['s23b_mask']}/{tract_id}/{patch_id}"
-    mask_fname = os.path.join(mask_dir, "mask2.fits")
+    mask_fname = os.path.join(mask_dir, "mask3.fits")
     bmask = fitsio.read(mask_fname)
     nim_dir = f"{os.environ['s23b_nimg']}/{tract_id}/{patch_id}/i"
     nim_fname = glob.glob(os.path.join(nim_dir, "*.fits"))[0]
     bmask = (bmask | (fitsio.read(nim_fname) <=2).astype(np.int16))
 
-    det_dir = f"{os.environ['s23b_anacal2']}/{tract_id}/{patch_id}"
+    det_dir = f"{os.environ['s23b_anacal3']}/{tract_id}/{patch_id}"
     det_fname = os.path.join(det_dir, "detect.fits")
     detection = fitsio.read(det_fname)
 
@@ -65,13 +64,13 @@ def read_files(tract_id, patch_id):
     }
 
 
-def process_patch(entry, skymap, task, noise_corr):
+def process_patch(entry, skymap, task):
     tract_id = entry["tract"]
     patch_db = entry["patch"]
     patch_x = patch_db // 100
     patch_y = patch_db % 100
     patch_id = patch_x + patch_y * 9
-    out_dir = f"{os.environ['s23b_anacal2']}/{tract_id}/{patch_id}"
+    out_dir = f"{os.environ['s23b_anacal3']}/{tract_id}/{patch_id}"
     out_fname = os.path.join(out_dir, "fpfs.fits")
     if os.path.isfile(out_fname):
         return
@@ -88,7 +87,7 @@ def process_patch(entry, skymap, task, noise_corr):
         seed=seed,
         noise_corr=res["noise_corr"],
         detection=res["detection"],
-        band=None,
+        band="i",
         mask_array=res["mask"],
     )
     catalog = task.fpfs.run(**data)
@@ -100,14 +99,14 @@ def process_patch(entry, skymap, task, noise_corr):
 
 def main():
     args = parse_args()
-
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     size = comm.Get_size()
 
     if rank == 0:
+        rootdir = os.environ["s23b"]
         full = fitsio.read(
-            "tracts_fdfc_v1_final.fits"
+            f"{rootdir}/tracts_fdfc_v1_final.fits"
         )
         selected = full[args.start: args.end]
         if args.field != "all":
@@ -134,20 +133,9 @@ def main():
     config.fpfs.sigma_arcsec1 = 0.5657
     task = FpfsForcePipe(config=config)
 
-    noise_corr = fitsio.read(
-        "noise_correlation2.fits"
-    )
-    # Initialize tqdm progress bar for this rank
-    noise_corr = None
-    pbar = tqdm(total=len(my_entries), desc=f"Rank {rank}", position=rank)
     for entry in my_entries:
-        try:
-            process_patch(entry, skymap, task, noise_corr)
-            gc.collect()
-        except Exception:
-            print("failed: ", entry["index"])
-        pbar.update(1)
-    pbar.close()
+        process_patch(entry, skymap, task)
+        gc.collect()
     return
 
 

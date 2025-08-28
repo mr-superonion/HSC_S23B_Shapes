@@ -73,29 +73,14 @@ colnames = [
 ]
 
 
-# "g_flux",
-# "g_dflux_dg1",
-# "g_dflux_dg2",
-# "r_flux",
-# "r_dflux_dg1",
-# "r_dflux_dg2",
-# "i_flux",
-# "i_dflux_dg1",
-# "i_dflux_dg2",
-# "z_flux",
-# "z_dflux_dg1",
-# "z_dflux_dg2",
-# "y_flux",
-# "y_dflux_dg1",
-# "y_dflux_dg2",
-
-
 def parse_args():
     parser = argparse.ArgumentParser(description="Process patch masks with MPI.")
     parser.add_argument(
         "--start", type=int, required=True, help="Start index of datalist."
     )
-    parser.add_argument("--end", type=int, required=True, help="End index of datalist.")
+    parser.add_argument(
+        "--end", type=int, required=True, help="End index of datalist."
+    )
     return parser.parse_args()
 
 
@@ -111,7 +96,7 @@ def process_patch(entry, skymap, task):
     patch_y = patch_db % 100
     patch_id = patch_x + patch_y * 9
 
-    out_dir = f"{os.environ['s23b_anacal2']}/{tract_id}/{patch_id}"
+    out_dir = f"{os.environ['s23b_anacal3']}/{tract_id}/{patch_id}"
     out_fname = os.path.join(out_dir, "match.fits")
     if os.path.isfile(out_fname):
         return None
@@ -131,10 +116,10 @@ def process_patch(entry, skymap, task):
     catalog = np.array(fitsio.read(det_fname))
     fpfs_fname = os.path.join(out_dir, "fpfs.fits")
     tmp = np.array(fitsio.read(fpfs_fname))
-    catalog["fpfs_e1"] = tmp["fpfs1_e1"]
-    catalog["fpfs_de1_dg1"] = tmp["fpfs1_de1_dg1"]
-    catalog["fpfs_e2"] = tmp["fpfs1_e2"]
-    catalog["fpfs_de2_dg2"] = tmp["fpfs1_de2_dg2"]
+    catalog["fpfs_e1"] = tmp["i_fpfs1_e1"]
+    catalog["fpfs_de1_dg1"] = tmp["i_fpfs1_de1_dg1"]
+    catalog["fpfs_e2"] = tmp["i_fpfs1_e2"]
+    catalog["fpfs_de2_dg2"] = tmp["i_fpfs1_de2_dg2"]
     del tmp
     index = np.arange(len(catalog))
     catalog = rfn.append_fields(
@@ -163,7 +148,7 @@ def process_patch(entry, skymap, task):
     j12 = j12 * ff2
     j21 = j21 * ff2
     j22 = j22 * ff2
-    rho = (j11 + j22) / 2.0
+    rho = (j21 - j12) / 2.0
     g1 = (j11 - j22) / 2.0
     g2 = (j12 + j21) / 2.0
     catalog["fpfs_e1"] = catalog["fpfs_e1"] + g1 * catalog["fpfs_de1_dg1"]
@@ -250,8 +235,9 @@ def main():
     size = comm.Get_size()
 
     if rank == 0:
+        rootdir = os.environ["s23b"]
         full = fitsio.read(
-            "tracts_fdfc_v1_final.fits"
+            f"{rootdir}/tracts_fdfc_v1_final.fits"
         )
         selected = full[args.start : args.end]
     else:

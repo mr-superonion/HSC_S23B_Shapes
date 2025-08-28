@@ -49,7 +49,7 @@ def process_patch(entry):
     exp_fname = glob.glob(os.path.join(calexp_dir, "*.fits"))[0]
     exposure = afwImage.ExposureF.readFits(exp_fname)
     mask_dir = f"{os.environ['s23b_mask']}/{tract_id}/{patch_id}"
-    mask_fname = os.path.join(mask_dir, "mask2.fits")
+    mask_fname = os.path.join(mask_dir, "mask3.fits")
     bmask = fitsio.read(mask_fname)
     nim_dir = f"{os.environ['s23b_nimg']}/{tract_id}/{patch_id}/i"
     nim_fname = glob.glob(os.path.join(nim_dir, "*.fits"))[0]
@@ -58,13 +58,14 @@ def process_patch(entry):
     noise_array = np.asarray(
         exposure.image.array,
         dtype=np.float32,
-    )[500:3500, 500:3500]
+    )[300:3700, 300:3700]
+    noise_var = np.nanmedian(exposure.variance.array)
 
     window_array = np.asarray(
         (bmask == 0) & (exposure.mask.array == 0) &
-        (exposure.image.array ** 2.0 < exposure.variance.array * 10),
+        (exposure.image.array ** 2.0 < noise_var * 10),
         dtype=np.float32,
-    )[500:3500, 500:3500]
+    )[300:3700, 300:3700]
     del exposure, bmask
     noise_array[~window_array.astype(bool)] = 0.0
     pad_width = ((10, 10), (10, 10))  # ((top, bottom), (left, right))
@@ -110,7 +111,7 @@ def main():
 
     if rank == 0:
         full = fitsio.read(
-            "tracts_fdfc_v1_final.fits"
+            os.path.join(os.environ["s23b"], "tracts_fdfc_v1_final.fits")
         )
         selected = full[args.start: args.end]
         if args.field != "all":

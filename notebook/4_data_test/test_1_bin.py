@@ -105,19 +105,19 @@ def test_color_bin(data, shape, ctype="gr"):
         mag_i = 27 - 2.5*np.log10(data["i_flux"])
         c = mag_r - mag_i
         cmin = -0.2
-        cmax = 2.0
+        cmax = 1.5
     elif ctype=="iz":
         mag_i = 27 - 2.5*np.log10(data["i_flux"])
         mag_z = 27 - 2.5*np.log10(data["z_flux"])
         c = mag_i - mag_z
-        cmin = -1.0
-        cmax = 1.0
+        cmin = -0.4
+        cmax = 1.2
     elif ctype=="zy":
         mag_z = 27 - 2.5*np.log10(data["z_flux"])
         mag_y = 27 - 2.5*np.log10(data["y_flux"])
         c = mag_z - mag_y
-        cmin = -1.5
-        cmax = 1.5
+        cmin = -1.0
+        cmax = 1.0
     else:
         raise ValueError("ctype not support")
     bins = np.linspace(cmin, cmax, nbins + 1)
@@ -149,16 +149,16 @@ def split_work(data, size, rank):
 
 
 def process_tract(tract_id):
-    fname1 = f"{os.environ['s23b_anacal2']}/tracts/{tract_id}.fits"
+    fname1 = f"{os.environ['s23b_anacal3']}/tracts/{tract_id}.fits"
     data = fitsio.read(fname1)
     mag = 27.0 - 2.5 * np.log10(data["flux"])
     abse2 = data["e1"] ** 2.0 + data["e2"] ** 2.0
     mask = (
-        (mag < 25.0) &
+        (mag < 24.5) &
         (abse2 < 0.09)
     )
     data = data[mask]
-    fname2 = f"{os.environ['s23b_db_color']}/tracts/{tract_id}.fits"
+    fname2 = f"{os.environ['s23b_anacal3']}/tracts_color/{tract_id}.fits"
     color = fitsio.read(fname2)
     color = color[mask]
 
@@ -192,7 +192,7 @@ def main():
 
     if rank == 0:
         full = fitsio.read(
-            "tracts.fits"
+            f"{os.environ['s23b']}/tracts_id.fits"
         )
         selected = full[args.start: args.end]
     else:
@@ -229,7 +229,7 @@ def main():
             gathered[tt] = np.stack(flat)
     if rank == 0:
         for tt in test_names:
-            outfname = f"{os.environ['s23b_anacal2']}/{tt}_stack.fits"
+            outfname = f"{os.environ['s23b_anacal3']}/tests/{tt}_stack.fits"
             fitsio.write(outfname, gathered[tt])
     comm.Barrier()
     return

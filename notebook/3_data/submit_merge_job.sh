@@ -13,5 +13,5 @@ FIELDS=("spring1" "spring2" "spring3" "autumn1" "autumn2" "hectomap")
 for field in "${FIELDS[@]}"; do
     echo "Submitting job for field: $field"
     xsubMini mpirun -np 20 $SCRIPT --field "$field"
-    sleep 0.5
+    sleep 1.5
 done

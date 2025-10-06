@@ -2,13 +2,13 @@
 
 import argparse
 import os
-import treecorr
-import numpy as np
-from tqdm import tqdm
 
-import fitsio
-from mpi4py import MPI
 import astropy.io.ascii as pyascii
+import fitsio
+import numpy as np
+import treecorr
+from mpi4py import MPI
+from tqdm import tqdm
 
 
 def get_shape(catalog):

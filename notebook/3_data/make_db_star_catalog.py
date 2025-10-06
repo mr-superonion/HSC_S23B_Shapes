@@ -4,13 +4,13 @@ import argparse
 import gc
 import glob
 import os
-from tqdm import tqdm
 
 import fitsio
 import numpy as np
 from lsst.skymap.ringsSkyMap import RingsSkyMap, RingsSkyMapConfig
 from mpi4py import MPI
 from numpy.lib import recfunctions as rfn
+from tqdm import tqdm
 
 
 # Parse command-line arguments

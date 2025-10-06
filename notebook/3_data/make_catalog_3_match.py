@@ -4,20 +4,16 @@ import argparse
 import gc
 import glob
 import os
-import numpy as np
-from tqdm import tqdm
 
 import fitsio
-from lsst.skymap.ringsSkyMap import RingsSkyMap, RingsSkyMapConfig
-from mpi4py import MPI
-from xlens.process_pipe.match import (
-    matchPipe,
-    matchPipeConfig,
-)
-
-from numpy.lib import recfunctions as rfn
+import numpy as np
 from lsst.afw.image import ExposureF
 from lsst.afw.table import SourceCatalog
+from lsst.skymap.ringsSkyMap import RingsSkyMap, RingsSkyMapConfig
+from mpi4py import MPI
+from numpy.lib import recfunctions as rfn
+from tqdm import tqdm
+from xlens.process_pipe.match import matchPipe, matchPipeConfig
 
 dm_colnames = [
     "id",

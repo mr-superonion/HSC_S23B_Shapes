@@ -13,7 +13,6 @@ import numpy as np
 from lsst.skymap.ringsSkyMap import RingsSkyMap, RingsSkyMapConfig
 from mpi4py import MPI
 
-
 badplanes = [
     "BAD",
     "CR",

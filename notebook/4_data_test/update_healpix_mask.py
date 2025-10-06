@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 import argparse
 
-import numpy as np
-import healpy as hp
 import astropy.io.fits as pyfits
+import healpy as hp
+import numpy as np
 
 
 # Parse command-line arguments

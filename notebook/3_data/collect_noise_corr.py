@@ -4,12 +4,12 @@ import argparse
 import gc
 import glob
 import os
-from tqdm import tqdm
 
 import fitsio
-import numpy as np
 import lsst.afw.image as afwImage
+import numpy as np
 from mpi4py import MPI
+from tqdm import tqdm
 
 
 # Parse command-line arguments

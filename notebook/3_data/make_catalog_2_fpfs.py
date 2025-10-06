@@ -3,16 +3,14 @@
 import argparse
 import gc
 import glob
-import numpy as np
 import os
 
 import fitsio
 import lsst.afw.image as afwImage
+import numpy as np
 from lsst.skymap.ringsSkyMap import RingsSkyMap, RingsSkyMapConfig
 from mpi4py import MPI
-from xlens.process_pipe.fpfs_force import (
-    FpfsForcePipe, FpfsForcePipeConfig
-)
+from xlens.process_pipe.fpfs_force import FpfsForcePipe, FpfsForcePipeConfig
 
 
 # Parse command-line arguments

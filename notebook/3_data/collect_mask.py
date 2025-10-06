@@ -5,16 +5,15 @@ import gc
 import glob
 import os
 import re
-import astropy.table as asttable
 
 import anacal
+import astropy.table as asttable
 import fitsio
 import lsst.afw.image as afwimage
 import lsst.afw.table as afwtable
 import numpy as np
 from lsst.skymap.ringsSkyMap import RingsSkyMap, RingsSkyMapConfig
 from mpi4py import MPI
-
 
 badplanes = [
     "BAD",

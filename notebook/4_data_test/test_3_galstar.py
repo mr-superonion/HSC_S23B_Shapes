@@ -2,13 +2,12 @@
 
 import argparse
 import os
-import treecorr
-import numpy as np
 
 import fitsio
-from mpi4py import MPI
+import numpy as np
 import numpy.lib.recfunctions as rfn
-
+import treecorr
+from mpi4py import MPI
 
 
 # Parse command-line arguments

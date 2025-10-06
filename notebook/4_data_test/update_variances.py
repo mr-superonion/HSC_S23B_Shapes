@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 import argparse
 
-import fitsio
-import numpy as np
-import healpy as hp
 import astropy.io.fits as pyfits
+import fitsio
+import healpy as hp
+import numpy as np
 
 
 # Parse command-line arguments

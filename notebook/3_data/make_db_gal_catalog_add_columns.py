@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
 import os
+
+import astropy.io.fits as pyfits
 import fitsio
 import numpy as np
 from mpi4py import MPI
-import astropy.io.fits as pyfits
 from numpy.lib import recfunctions as rfn
 
 

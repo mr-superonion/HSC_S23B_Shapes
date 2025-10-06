@@ -4,14 +4,12 @@ import argparse
 import gc
 import glob
 import os
-import numpy as np
-from tqdm import tqdm
 
 import fitsio
-from mpi4py import MPI
-
+import numpy as np
 from lsst.afw.image import ExposureF
-
+from mpi4py import MPI
+from tqdm import tqdm
 
 dm_colnames = [
     "deblend_nChild",

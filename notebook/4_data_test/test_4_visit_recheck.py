@@ -2,11 +2,11 @@
 
 import argparse
 import os
-import treecorr
-import numpy as np
-import healpy as hp
 
 import fitsio
+import healpy as hp
+import numpy as np
+import treecorr
 from mpi4py import MPI
 
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-import os
 import argparse
-import healpy as hp
+import os
 
 import fitsio
+import healpy as hp
 import numpy as np
 
 

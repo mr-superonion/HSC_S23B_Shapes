@@ -4,9 +4,9 @@ import argparse
 import gc
 import glob
 import os
-import numpy as np
 
 import fitsio
+import numpy as np
 import numpy.lib.recfunctions as rfn
 from lsst.skymap.ringsSkyMap import RingsSkyMap, RingsSkyMapConfig
 from mpi4py import MPI

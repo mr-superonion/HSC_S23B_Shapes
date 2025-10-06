@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 
 import argparse
+import glob
 import os
-import numpy as np
-import healpy as hp
-import smatch
 
 import fitsio
-from mpi4py import MPI
+import healpy as hp
+import numpy as np
 import numpy.lib.recfunctions as rfn
-import glob
+import smatch
 from lsst.skymap.ringsSkyMap import RingsSkyMap, RingsSkyMapConfig
+from mpi4py import MPI
 
 colnames = [
     "object_id",

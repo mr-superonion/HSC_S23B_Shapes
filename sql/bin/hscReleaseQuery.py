@@ -1,17 +1,17 @@
 #!/usr/bin/env python
 # Based on
 # https://hsc-gitlab.mtk.nao.ac.jp/ssp-software/data-access-tools/-/blob/master/dr3/catalogQuery/hscSspQuery3.py
-import os
-import json
-import time
-import getpass
 import argparse
-import urllib.request
+import getpass
+import json
+import os
+import time
 import urllib.error
 import urllib.parse
+import urllib.request
+
 import astropy.io.ascii as ascii
 from astropy.table import Table
-
 
 version = 20190924.1
 vv = "-color3"

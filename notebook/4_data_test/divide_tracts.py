@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-import os
 import argparse
+import os
 
 import fitsio
 import numpy as np

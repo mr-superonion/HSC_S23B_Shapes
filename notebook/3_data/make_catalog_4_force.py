@@ -7,16 +7,12 @@ import os
 
 import fitsio
 import lsst.afw.image as afwImage
+import numpy as np
 from lsst.skymap.ringsSkyMap import RingsSkyMap, RingsSkyMapConfig
 from mpi4py import MPI
-import numpy as np
-from xlens.process_pipe.anacal_force import (
-    AnacalForcePipe,
-    AnacalForcePipeConfig,
-)
-
 from numpy.lib import recfunctions as rfn
-
+from xlens.process_pipe.anacal_force import (AnacalForcePipe,
+                                             AnacalForcePipeConfig)
 
 band_seed = {
     "g": 3,

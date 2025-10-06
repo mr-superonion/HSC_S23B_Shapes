@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-import os
 import argparse
+import os
 
 import fitsio
-import numpy as np
 import healpy as hp
+import numpy as np
 import numpy.lib.recfunctions as rfn
-
 
 field_int_map = {
     "spring1": 1,

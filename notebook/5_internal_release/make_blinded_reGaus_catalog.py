@@ -1,12 +1,12 @@
 #!/usr/bin/env python
+import getpass
 import os
 import sys
 import time
-import gnupg
-import getpass
 
-import numpy as np
 import astropy.io.fits as pyfits
+import gnupg
+import numpy as np
 from astropy.table import Table
 
 s23b = os.getenv("s23b")

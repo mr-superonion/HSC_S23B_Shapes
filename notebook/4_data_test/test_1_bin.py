@@ -2,11 +2,11 @@
 
 import argparse
 import os
-import numpy as np
-from tqdm import tqdm
 
 import fitsio
+import numpy as np
 from mpi4py import MPI
+from tqdm import tqdm
 
 
 def get_shape(catalog):

@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 import argparse
 
-import numpy as np
 import fitsio
+import numpy as np
 import numpy.lib.recfunctions as rfn
 from scipy.spatial import cKDTree
-
 
 colname1 = [
  'object_id',
@@ -112,7 +111,7 @@ def main():
     args = parse_args()
     field = args.field
     rootdir = "/gpfs02/work/xiangchong.li/work/hsc_data/s23b/deepCoadd_anacal3"
-    outdir = "/gpfs02/work/xiangchong.li/work/hsc_data/s23b_release/"
+    outdir = "/gpfs02/work/xiangchong.li/work/hsc_data/s23b_shape/"
     tplist = np.array(fitsio.read(
         "/gpfs02/work/xiangchong.li/work/hsc_data/s23b/tracts_fdfc_v1_final.fits"
     ))
@@ -149,7 +148,7 @@ def main():
     tp2 = np.column_stack((tp2, np.zeros_like(tp2)))
     tree = cKDTree(tp2)
 
-    dist, ind = tree.query(tp1, distance_upper_bound=0.5)
+    _, ind = tree.query(tp1, distance_upper_bound=0.5)
     dd2["a_g"] = dd2["a_g"] + tplist["g_mag_offset"][ind]
     dd2["a_r"] = dd2["a_r"] + tplist["r_mag_offset"][ind]
     dd2["a_i"] = dd2["a_i"] + tplist["i_mag_offset"][ind]

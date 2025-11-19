@@ -17,7 +17,6 @@ badplanes = [
     "BAD",
     "CR",
     "NO_DATA",
-    "REJECTED",
     "SAT",
     "UNMASKEDNAN",
 ]

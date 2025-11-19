@@ -10,8 +10,10 @@ import lsst.afw.image as afwImage
 import numpy as np
 from lsst.skymap.ringsSkyMap import RingsSkyMap, RingsSkyMapConfig
 from mpi4py import MPI
-from xlens.process_pipe.anacal_detect import (AnacalDetectPipe,
-                                              AnacalDetectPipeConfig)
+from xlens.process_pipe.anacal_detect import (
+    AnacalDetectPipe,
+    AnacalDetectPipeConfig,
+)
 
 
 # Parse command-line arguments

@@ -100,12 +100,6 @@ def parse_args():
     )
     return parser.parse_args()
 
-def select_data(d, sel):
-    outcome = d[sel]
-    order = np.argsort(outcome["object_id"])
-    outcome = outcome[order]
-    return outcome
-
 
 def main():
     args = parse_args()

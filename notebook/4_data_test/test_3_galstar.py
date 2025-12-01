@@ -8,6 +8,7 @@ import numpy as np
 import numpy.lib.recfunctions as rfn
 import treecorr
 from mpi4py import MPI
+import healpy as hp
 
 
 # Parse command-line arguments
@@ -71,17 +72,31 @@ def prepare_catalogs():
         data["i_higherordermomentssource_31"] +
         data["i_higherordermomentssource_13"]
     )
+
+    NSIDE = 1024
+    hpfname = f"{os.environ['s23b']}/fdfc_hp_window_updated.fits"
+    hmask = hp.read_map(
+        hpfname,
+        nest=True, dtype=bool,
+    )
+    pix = hp.ang2pix(
+        NSIDE,
+        np.deg2rad(90.0 - dec),
+        np.deg2rad(ra),
+        nest=True
+    )
     msk = (
-        (~np.isnan(e1p2)) &
-        (~np.isnan(e1s2)) &
-        (~np.isnan(e1p4)) &
-        (~np.isnan(e1s4)) &
-        (~np.isnan(e2p2)) &
-        (~np.isnan(e2s2)) &
-        (~np.isnan(e2p4)) &
-        (~np.isnan(e2s4)) &
-        (data["i_calib_psf_reserved"]) &
-        (snr>180.0)
+        (~np.isnan(e1p2))
+        & (~np.isnan(e1s2))
+        & (~np.isnan(e1p4))
+        & (~np.isnan(e1s4))
+        & (~np.isnan(e2p2))
+        & (~np.isnan(e2s2))
+        & (~np.isnan(e2p4))
+        & (~np.isnan(e2s4))
+        & (data["i_calib_psf_reserved"])
+        & (snr>200.0)
+        # & hmask[pix]
     )
 
     ra = ra[msk]
@@ -132,15 +147,30 @@ def prepare_catalogs():
         "Q4": catQ4,
     }
 
-def get_shape(fname1):
-    catalog = fitsio.read(fname1)
-    mag = 27.0 - 2.5 * np.log10(catalog["flux"])
+def get_shape(fname):
+    catalog = np.array(fitsio.read(fname))
+    mag = 27.0 - 2.5 * np.log10(catalog["i_flux_gauss4"])
     abse2 = catalog["e1"] ** 2.0 + catalog["e2"] ** 2.0
+    NSIDE = 1024
+    hpfname = f"{os.environ['s23b']}/fdfc_hp_window_updated.fits"
+    hmask = hp.read_map(
+        hpfname,
+        nest=True, dtype=bool,
+    )
+    pix = hp.ang2pix(
+        NSIDE,
+        np.deg2rad(90.0 - catalog["dec"]),
+        np.deg2rad(catalog["ra"]),
+        nest=True
+    )
     mask = (
         (mag < 24.5) &
-        (abse2 < 0.09)
+        (abse2 < 0.09) &
+        hmask[pix]
     )
     catalog = catalog[mask]
+    if len(catalog) < 2:
+        return None, None
     e1 = catalog["e1"] * catalog["wsel"]
     e2 = catalog["e2"] * catalog["wsel"]
 
@@ -171,8 +201,10 @@ def get_shape(fname1):
     return cate, catk
 
 def process_tract(tract_id):
-    fname1 = f"{os.environ['s23b_anacal3']}/tracts/{tract_id}.fits"
-    cate, catk = get_shape(fname1)
+    fname = f"{os.environ['s23b_anacal_v2']}/tracts/{tract_id}.fits"
+    cate, catk = get_shape(fname)
+    if cate is None:
+        return None
     nbins = 12
     catalogs = prepare_catalogs()
     dd =[]
@@ -200,7 +232,7 @@ def main():
 
     if rank == 0:
         full = fitsio.read(
-            f"{os.environ['s23b']}/tracts_id.fits"
+            f"{os.environ['s23b']}/tracts_id_v2.fits"
         )
         selected = full[args.start: args.end]
     else:
@@ -210,15 +242,15 @@ def main():
     my_entries = split_work(selected, size, rank)
     outcome = []
     for tract_id in my_entries:
-        outcome.append(
-            process_tract(tract_id)
-        )
+        tout = process_tract(tract_id)
+        if tout is not None:
+            outcome.append(tout)
 
     gathered_results = comm.gather(outcome, root=0)
     if rank == 0:
         flat = [arr for sublist in gathered_results for arr in sublist]
         gathered = np.stack(flat)
-        outfname = f"{os.environ['s23b_anacal3']}/tests/psfstar.fits"
+        outfname = f"{os.environ['s23b_anacal_v2']}/tests/psfstar.fits"
         fitsio.write(outfname, gathered)
     comm.Barrier()
     return

@@ -12,7 +12,6 @@ from lsst.afw.table import SourceCatalog
 from lsst.skymap.ringsSkyMap import RingsSkyMap, RingsSkyMapConfig
 from mpi4py import MPI
 from numpy.lib import recfunctions as rfn
-from tqdm import tqdm
 from xlens.process_pipe.match import matchPipe, matchPipeConfig
 
 dm_colnames = [
@@ -255,12 +254,9 @@ def main():
     config = matchPipeConfig()
     task = matchPipe(config=config)
 
-    pbar = tqdm(total=len(my_entries), desc=f"Rank {rank}", position=rank)
     for entry in my_entries:
         process_patch(entry, skymap, task)
         gc.collect()
-        pbar.update(1)
-    pbar.close()
     return
 
 

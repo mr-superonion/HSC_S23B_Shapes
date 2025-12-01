@@ -257,9 +257,9 @@ def process_patch(entry, skymap):
             r_list = []
             for xi, yi in zip(x, y):
                 rr, pp = get_vmin_r(exposure, yi, xi)
-                if pp < -8:
+                if pp < -6:
                     keep.append(True)
-                    r_list.append(rr * 1.2)
+                    r_list.append(rr * 1.5)
                 else:
                     keep.append(False)
 

@@ -51,23 +51,25 @@ def process_tract(field, tract_id, patch_list):
         patch_y = patch_db % 100
         patch_id = patch_x + patch_y * 9
         shape_dir = f"{os.environ['s23b_anacal_v2']}/{tract_id}/{patch_id}"
-        sel_fname = os.path.join(shape_dir, "star_sel.fits")
-        mstar = (fitsio.read(sel_fname) > 0)
+        sel_fname = os.path.join(shape_dir, "fdfc_sel.fits")
+        sel = (fitsio.read(sel_fname) > 0)
+        if np.sum(sel) < 3:
+            continue
         fname = os.path.join(shape_dir, "match.fits")
         dd = fitsio.read(fname)
-        dd = dd[((dd["wsel"] > 1e-6) & mstar)]
+        dd = dd[sel]
         sub = data[data["patch"] == patch_db]
 
-        # Match on "object_id"
         common_ids, sub_idx, _ = np.intersect1d(
-            sub["object_id"], dd["object_id"], return_indices=True
+            sub["object_id"],
+            dd["object_id"],
+            return_indices=True,
         )
         assert len(common_ids) == len(dd)
         out.append(sub[sub_idx])
     if out:
         out = rfn.stack_arrays(out, usemask=False)
         fitsio.write(out_fname, out)
-
     return
 
 

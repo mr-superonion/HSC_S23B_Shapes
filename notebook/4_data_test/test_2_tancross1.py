@@ -8,7 +8,7 @@ import fitsio
 import numpy as np
 import treecorr
 from mpi4py import MPI
-from tqdm import tqdm
+import healpy as hp
 
 
 def get_shape(catalog):
@@ -118,15 +118,35 @@ def compute_visit(cate, catk, visits):
 
 
 def process_tract(tract_id, clusters, tracts, visits):
-    fname1 = f"{os.environ['s23b_anacal3']}/tracts/{tract_id}.fits"
+    fname1 = f"{os.environ['s23b_anacal_v2']}/tracts/{tract_id}.fits"
     data = fitsio.read(fname1)
-    mag = 27.0 - 2.5 * np.log10(data["flux"])
+    mag = 27.0 - 2.5 * np.log10(data["i_flux_gauss4"])
     abse2 = data["e1"] ** 2.0 + data["e2"] ** 2.0
+    NSIDE = 1024
+    hpfname = f"{os.environ['s23b']}/fdfc_hp_window_updated.fits"
+    hmask = hp.read_map(
+        hpfname,
+        nest=True, dtype=bool,
+    )
+    pix = hp.ang2pix(
+        NSIDE,
+        np.deg2rad(90.0 - data["dec"]),
+        np.deg2rad(data["ra"]),
+        nest=True
+    )
     mask = (
-        (mag < 24.5) &
-        (abse2 < 0.09)
+        (mag < 24.5)
+        & (abse2 < 0.09)
+        # & hmask[pix]
     )
     data = data[mask]
+    if len(data) < 2:
+        return {
+            "cluster": None,
+            "tract": None,
+            "visit": None,
+        }
+
     shape = get_shape(data)
     del data
     cate = treecorr.Catalog(
@@ -162,7 +182,7 @@ def main():
     if rank == 0:
         rootdir = os.environ["s23b"]
         full = fitsio.read(
-            f"{rootdir}/tracts_id.fits"
+            f"{rootdir}/tracts_id_v2.fits"
         )
         selected = full[args.start: args.end]
         clusters = pyascii.read(f"{rootdir}/camira/camira_s23b_wide_v3.csv")
@@ -188,14 +208,11 @@ def main():
     }
     test_names = list(outcome.keys())
 
-    # Initialize tqdm progress bar for this rank
-    pbar = tqdm(total=len(my_entries), desc=f"Rank {rank}", position=rank)
     for tract_id in my_entries:
         out = process_tract(tract_id, clusters, tracts, visits)
-        for tt in test_names:
-            outcome[tt].append(out[tt])
-        pbar.update(1)
-    pbar.close()
+        if out["cluster"] is not None:
+            for tt in test_names:
+                outcome[tt].append(out[tt])
 
     gathered = {}
     for tt in test_names:
@@ -205,7 +222,7 @@ def main():
             gathered[tt] = np.stack(flat)
     if rank == 0:
         for tt in test_names:
-            outfname = f"{os.environ['s23b_anacal3']}/tests/NG_{tt}.fits"
+            outfname = f"{os.environ['s23b_anacal_v2']}/tests/NG_{tt}.fits"
             fitsio.write(outfname, gathered[tt])
     comm.Barrier()
     return

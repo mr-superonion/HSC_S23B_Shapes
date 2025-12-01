@@ -5,6 +5,7 @@ import glob
 import os
 
 import fitsio
+import healpy as hp
 import numpy as np
 import numpy.lib.recfunctions as rfn
 import smatch
@@ -39,6 +40,7 @@ for b in "grizy":
         colnames2.append(f"{b}_flux_gauss{t}")
         colnames2.append(f"{b}_dflux_gauss{t}_dg1")
         colnames2.append(f"{b}_dflux_gauss{t}_dg2")
+        colnames2.append(f"{b}_flux_gauss{t}_err")
 
 
 # Parse command-line arguments
@@ -55,7 +57,7 @@ def split_work(data, size, rank):
     return data[rank::size]
 
 
-def process_patch(entry, stars, skymap):
+def process_patch(entry, hmask, stars, skymap):
     tract_id = entry["tract"]
     patch_db = entry["patch"]
     patch_x = patch_db // 100
@@ -81,11 +83,11 @@ def process_patch(entry, stars, skymap):
     base_dir = f"{os.environ['s23b_anacal_v2']}/{tract_id}/{patch_id}"
     fname = os.path.join(base_dir, "match.fits")
     fname2 = os.path.join(base_dir, "force.fits")
-    sel_fname = os.path.join(base_dir, "star_sel.fits")
+    sel_fname = os.path.join(base_dir, "fdfc_sel.fits")
     radius_deg = 2.0 / 3600.0 # degrees
+    NSIDE = 1024
     if os.path.isfile(fname) and os.path.isfile(fname2):
         dd = np.array(fitsio.read(fname))
-
         matches = smatch.match(
             ra1=ss["ra"], dec1=ss["dec"],
             radius1=radius_deg,
@@ -97,8 +99,24 @@ def process_patch(entry, stars, skymap):
         i2_valid = i2[i2 >= 0]
         if i2_valid.size > 0:
             mstar[np.unique(i2_valid)] = False
-        sel = (dd["wsel"] > 1e-6) & (mstar)
-        fitsio.write(sel_fname, mstar.astype(int))
+
+        if not os.path.isfile(sel_fname):
+            if hmask is not None:
+                pix = hp.ang2pix(
+                    NSIDE,
+                    np.deg2rad(90.0 - dd["dec"]),
+                    np.deg2rad(dd["ra"]),
+                    nest=True
+                )
+                sel = (dd["wsel"] > 1e-6) & (mstar) & (hmask[pix])
+            else:
+                sel = (dd["wsel"] > 1e-6) & (mstar)
+            fitsio.write(sel_fname, sel.astype(int))
+        else:
+            sel = (fitsio.read(sel_fname) > 0)
+        if np.sum(sel) < 3:
+            return None
+
         dd = dd[sel]
         dd["dflux_dg2"] = -dd["dflux_dg2"]
         dd["dwsel_dg2"] = -dd["dwsel_dg2"]
@@ -135,10 +153,19 @@ def main():
         )
         mm = full["field"] == args.field
         selected = full[mm]
+        hpfname = f"{rootdir}/fdfc_hp_window_v2.fits"
+        if os.path.isfile(hpfname):
+            hmask = hp.read_map(
+                hpfname,
+                nest=True, dtype=bool,
+            )
+        else:
+            hmask = None
         stars = np.array(fitsio.read(f"{rootdir}/gaia/stars.fits"))
         stars = stars[(stars["g_mag"]<21.0) & (stars["g_mag"]>15.0)]
     else:
         selected = None
+        hmask = None
         stars = None
 
     # Set up the configuration
@@ -150,15 +177,15 @@ def main():
     skymap = RingsSkyMap(config)
 
     selected = comm.bcast(selected, root=0)
+    hmask = comm.bcast(hmask, root=0)
     stars = comm.bcast(stars, root=0)
     my_entries = split_work(selected, size, rank)
 
     data = []
     for entry in my_entries:
-        out = process_patch(entry, stars, skymap)
+        out = process_patch(entry, hmask, stars, skymap)
         if out is not None:
-            if len(out) > 2:
-                data.append(out)
+            data.append(out)
 
     data = rfn.stack_arrays(data, usemask=False)
     field = args.field

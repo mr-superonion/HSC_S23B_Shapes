@@ -36,11 +36,11 @@ def select_data(d, sel):
 def main():
     args = parse_args()
     field = args.field
-    rootdir = "/gpfs02/work/xiangchong.li/work/hsc_data/s23b/deepCoadd_anacal3"
+    rootdir = os.environ['s23b_anacal_v2']
 
     fname = f"{rootdir}/fields/{field}.fits"
     data = np.array(fitsio.read(fname))
-    mag = 27.0 - 2.5 * np.log10(data["flux"])
+    mag = 27.0 - 2.5 * np.log10(data["i_flux_gauss2"])
     abse2 = data["e1"] ** 2.0 + data["e2"] ** 2.0
     mm = (mag < 24.5) & (abse2 < 0.09)
 
@@ -63,7 +63,18 @@ def main():
     psf_myy = data2["i_hsmpsfmoments_shape22"]
     psf_mxy = data2["i_hsmpsfmoments_shape12"]
     fwhm = 2.355 * (psf_mxx * psf_myy - psf_mxy**2)**0.25
-    print(np.nanmean(fwhm))
+
+    e1_psf2 = (psf_mxx - psf_myy) / (psf_mxx + psf_myy)
+    e2_psf2 = psf_mxy / (psf_mxx + psf_myy) * 2.0
+
+    e1_psf4 = (
+        data2["i_higherordermomentspsf_40"] -
+        data2["i_higherordermomentspsf_04"]
+    )
+    e2_psf4 = 2.0 * (
+        data2["i_higherordermomentspsf_31"] +
+        data2["i_higherordermomentspsf_13"]
+    )
 
     nside = 1024
     npix = hp.nside2npix(nside)
@@ -78,17 +89,28 @@ def main():
     res_map = np.bincount(pix, weights=(r1+r2)/2.0, minlength=npix)
     var_map = np.bincount(pix, weights=variance, minlength=npix)
     fwhm_map = np.bincount(pix, weights=fwhm, minlength=npix)
+    e1_2_map = np.bincount(pix, weights=e1_psf2, minlength=npix)
+    e2_2_map = np.bincount(pix, weights=e2_psf2, minlength=npix)
+    e1_4_map = np.bincount(pix, weights=e1_psf4, minlength=npix)
+    e2_4_map = np.bincount(pix, weights=e2_psf4, minlength=npix)
 
-    outfname = f"{os.environ['s23b_anacal3']}/tests/gal_maps_{field}.fits"
+    outfname = f"{rootdir}/galmaps/gal_maps_{field}.fits"
     dtype = np.dtype([
         ("num",  "i4"),
         ("mask", "i4"),
         ("response", "f8"),
         ("variance", "f4"),
         ("fwhm","f4"),
+        ("e1_2","f4"),
+        ("e2_2","f4"),
+        ("e1_4","f4"),
+        ("e2_4","f4"),
     ])
     outcome = rfn.unstructured_to_structured(
-        np.column_stack([num_map, mask_map, res_map, var_map, fwhm_map]),
+        np.column_stack([
+            num_map, mask_map, res_map, var_map, fwhm_map,
+            e1_2_map, e2_2_map, e1_4_map, e2_4_map,
+        ]),
         dtype=dtype,
         copy=False
     )

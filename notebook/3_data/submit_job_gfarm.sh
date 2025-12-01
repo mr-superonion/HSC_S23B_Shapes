@@ -2,7 +2,7 @@
 
 # ---------------- PBS wrapper config ----------------
 server="gfarm"
-Nodes="nodes=ansys01-ib:ppn=20+ansys02-ib:ppn=20+ansys03-ib:ppn=20+ansys05-ib:ppn=20+ansys06-ib:ppn=20+ansys07-ib:ppn=20+ansys09-ib:ppn=20+ansys10-ib:ppn=20+ansys11-ib:ppn=20+ansys12-ib:ppn=20+ansys13-ib:ppn=20+ansys15-ib:ppn=20+ansys16-ib:ppn=20+ansys17-ib:ppn=20+ansys18-ib:ppn=20+ansys19-ib:ppn=20+ansys20-ib:ppn=20+ansys21-ib:ppn=20+ansys22-ib:ppn=20+ansys23-ib:ppn=20"
+Nodes="nodes=ansys01-ib:ppn=20+ansys02-ib:ppn=20+ansys03-ib:ppn=20+ansys05-ib:ppn=20+ansys06-ib:ppn=20+ansys07-ib:ppn=20+ansys09-ib:ppn=20+ansys10-ib:ppn=20+ansys11-ib:ppn=20+ansys12-ib:ppn=20+ansys13-ib:ppn=20+ansys15-ib:ppn=20+ansys16-ib:ppn=20+ansys17-ib:ppn=20+ansys18-ib:ppn=20+ansys19-ib:ppn=20+ansys20-ib:ppn=20+ansys25-ib:ppn=20+ansys26-ib:ppn=20+ansys27-ib:ppn=20"
 
 # ------------- Function: submit one PBS job ---------
 submit_qsub() {

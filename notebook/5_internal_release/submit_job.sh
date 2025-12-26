@@ -8,10 +8,10 @@ fi
 
 SCRIPT=$1
 
-FIELDS=("spring1" "spring2" "spring3" "autumn1" "autumn2" "hectomap")
+FIELDS=("spring1" "spring2" "spring3")
 
 for field in "${FIELDS[@]}"; do
     echo "Submitting job for field: $field"
     xsubTiny python $SCRIPT --field "$field"
-    sleep 1.5
+    sleep 10
 done

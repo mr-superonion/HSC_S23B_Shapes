@@ -93,7 +93,7 @@ def encrypt():
     s23b = os.getenv("s23b")
     if not s23b:
         raise RuntimeError("Environment variable s23b is not set.")
-    root_dir = f"{s23b}/../v2/"
+    root_dir = f"{s23b}/../catalog_v2/"
     # directory
     if testing:
         outdir = os.path.join(

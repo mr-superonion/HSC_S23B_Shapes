@@ -29,50 +29,49 @@ for b in "grizy":
         colname1.append(f"{b}_flux_gauss{t}_err")
 
 cnd1 = [
- 'wsel',
- 'dwsel_dg1',
- 'dwsel_dg2',
- 'de1_dg1',
- 'de1_dg2',
- 'de2_dg1',
- 'de2_dg2',
+    'dwsel_dg1',
+    'dwsel_dg2',
+    'de1_dg1',
+    'de1_dg2',
+    'de2_dg1',
+    'de2_dg2',
 ]
 
 colname2 = [
- 'object_id',
- 'tract',
- 'patch',
- 'g_cmodel_mag',
- 'g_cmodel_magerr',
- 'r_cmodel_mag',
- 'r_cmodel_magerr',
- 'i_cmodel_mag',
- 'i_cmodel_magerr',
- 'z_cmodel_mag',
- 'z_cmodel_magerr',
- 'y_cmodel_mag',
- 'y_cmodel_magerr',
- 'a_g',
- 'a_r',
- 'a_i',
- 'a_z',
- 'a_y',
- 'i_sdssshape_shape11',
- 'i_sdssshape_shape12',
- 'i_sdssshape_shape22',
- 'i_hsmpsfmoments_shape11',
- 'i_hsmpsfmoments_shape22',
- 'i_hsmpsfmoments_shape12',
- 'i_higherordermomentspsf_04',
- 'i_higherordermomentspsf_13',
- 'i_higherordermomentspsf_22',
- 'i_higherordermomentspsf_31',
- 'i_higherordermomentspsf_40',
- 'g_variance_value',
- 'r_variance_value',
- 'i_variance_value',
- 'z_variance_value',
- 'y_variance_value',
+    'object_id',
+    'tract',
+    'patch',
+    'g_cmodel_mag',
+    'g_cmodel_magerr',
+    'r_cmodel_mag',
+    'r_cmodel_magerr',
+    'i_cmodel_mag',
+    'i_cmodel_magerr',
+    'z_cmodel_mag',
+    'z_cmodel_magerr',
+    'y_cmodel_mag',
+    'y_cmodel_magerr',
+    'a_g',
+    'a_r',
+    'a_i',
+    'a_z',
+    'a_y',
+    'i_sdssshape_shape11',
+    'i_sdssshape_shape12',
+    'i_sdssshape_shape22',
+    'i_hsmpsfmoments_shape11',
+    'i_hsmpsfmoments_shape22',
+    'i_hsmpsfmoments_shape12',
+    'i_higherordermomentspsf_04',
+    'i_higherordermomentspsf_13',
+    'i_higherordermomentspsf_22',
+    'i_higherordermomentspsf_31',
+    'i_higherordermomentspsf_40',
+    'g_variance_value',
+    'r_variance_value',
+    'i_variance_value',
+    'z_variance_value',
+    'y_variance_value',
 ]
 
 # Parse command-line arguments
@@ -94,25 +93,35 @@ def main():
     args = parse_args()
     field = args.field
     rootdir = "/gpfs02/work/xiangchong.li/work/hsc_data/s23b/deepCoadd_anacal_v2"
-    outdir = "/gpfs02/work/xiangchong.li/work/hsc_data/v2/s23b_shape/"
+    outdir = "/gpfs02/work/xiangchong.li/work/hsc_data/catalog_v2/s23b_shape"
     tplist = np.array(fitsio.read(
-        "/gpfs02/work/xiangchong.li/work/hsc_data/s23b/tracts_fdfc_v1_final.fits"
+        "/gpfs02/work/xiangchong.li/work/hsc_data/s23b/tracts_fdfc_v2_final.fits"
     ))
+
 
     fname = f"{rootdir}/fields/{field}.fits"
     dd = np.array(fitsio.read(fname, columns=colname1))
     fname = f"{rootdir}/fields_color/{field}.fits"
     dd2 = np.array(fitsio.read(fname, columns=colname2))
     assert np.sum(np.abs(dd2["object_id"] - dd["object_id"])) == 0
-    r1 = dd["de1_dg1"] * dd["wsel"]
-    r2 = dd["de2_dg2"] * dd["wsel"]
+    fname = f"{rootdir}/fields/{field}_response.fits"
+    dd3 = np.array(fitsio.read(fname))
+    assert np.sum(np.abs(dd3["object_id"] - dd["object_id"])) == 0
     out = np.zeros(len(dd), dtype=[("object_id", "i8"), ("response", "f8")])
     out["object_id"] = dd["object_id"]
-    out["response"] = (r1 + r2) / 2.0
+    out["response"] = dd3["R"]
     fitsio.write(f"{outdir}/.response/{field}.fits", out)
-    dd["e1"] = dd["wsel"] * dd["e1"]
-    dd["e2"] = dd["wsel"] * dd["e2"]
+
     dd = rfn.drop_fields(dd, cnd1, usemask=False)
+    dd = rfn.append_fields(
+        dd,
+        names=[
+            "e22c", "e22s", "e44c", "e44s",
+        ],
+        data=[dd3["e22c"], dd3["e22s"], dd3["e44c"], dd3["e44s"]],
+        dtypes=["f8"] * 4,
+        usemask=False,
+    )
     fitsio.write(f"{outdir}/anacal_{field}.fits", dd)
 
     tp1 = dd2["tract"].astype(int) * 1000 + dd2["patch"].astype(int)

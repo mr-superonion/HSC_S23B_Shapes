@@ -149,7 +149,7 @@ def main():
     if rank == 0:
         rootdir = os.environ["s23b"]
         full = fitsio.read(
-            f"{rootdir}/tracts_fdfc_v1_final.fits"
+            f"{rootdir}/tracts_fdfc_v2_final.fits"
         )
         mm = full["field"] == args.field
         selected = full[mm]

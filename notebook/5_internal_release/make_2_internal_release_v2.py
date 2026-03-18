@@ -7,18 +7,18 @@ import numpy.lib.recfunctions as rfn
 from scipy.spatial import cKDTree
 
 colname1 = [
- 'object_id',
- 'ra',
- 'dec',
- 'wsel',
- 'dwsel_dg1',
- 'dwsel_dg2',
- 'e1',
- 'de1_dg1',
- 'de1_dg2',
- 'e2',
- 'de2_dg1',
- 'de2_dg2',
+    'object_id',
+    'ra',
+    'dec',
+    'wsel',
+    'dwsel_dg1',
+    'dwsel_dg2',
+    'e1',
+    'de1_dg1',
+    'de1_dg2',
+    'e2',
+    'de2_dg1',
+    'de2_dg2',
 ]
 
 for b in "grizy":

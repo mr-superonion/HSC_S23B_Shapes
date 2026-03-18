@@ -19,13 +19,16 @@ testing = False
 if not testing:
     blinder = "Jim Bosch"
     hsc_mail = "hscblinder@gmail.com"
-
-    user = "Raul Teixeira"
-    user_mail = "raul.teixeira@duke.edu"
+    blinder = "xiangchong"
+    hsc_mail = "xiangchong.li@ipmu.jp"
+    # user = "Raul Teixeira"
+    # user_mail = "raul.teixeira@duke.edu"
     # user = "Shreya Mukherjee"
     # user_mail = "shreya.mukherjee@iucaa.in"
     # user = "Ryo Terasawa"
     # user_mail = "ryo.terasawa@ipmu.jp"
+    user = "xiangchong"
+    user_mail = "xiangchong.li@ipmu.jp"
 else:
     blinder = "xiangchong"
     hsc_mail = "xiangchong.li@ipmu.jp"

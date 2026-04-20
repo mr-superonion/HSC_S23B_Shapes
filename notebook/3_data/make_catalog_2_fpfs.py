@@ -126,9 +126,9 @@ def main():
 
     config = FpfsForcePipeConfig()
     config.fpfs.do_noise_bias_correction = True
-    config.fpfs.use_average_psf = False
+    config.fpfs.psf_model_type = "object"
     config.fpfs.npix = 64
-    config.fpfs.sigma_arcsec1 = 0.5657
+    config.fpfs.sigma_shapelets1 = 0.5657
     task = FpfsForcePipe(config=config)
 
     for entry in my_entries:

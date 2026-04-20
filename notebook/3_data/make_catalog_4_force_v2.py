@@ -11,10 +11,8 @@ import numpy as np
 from lsst.skymap.ringsSkyMap import RingsSkyMap, RingsSkyMapConfig
 from mpi4py import MPI
 from numpy.lib import recfunctions as rfn
-from xlens.process_pipe.anacal_detect import (
-    AnacalDetectPipe,
-    AnacalDetectPipeConfig,
-)
+from xlens.process_pipe.anacal_detect import (AnacalDetectPipe,
+                                              AnacalDetectPipeConfig)
 
 band_seed = {
     "g": 3,

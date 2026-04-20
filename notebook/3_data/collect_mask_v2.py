@@ -7,10 +7,10 @@ import os
 
 import anacal
 import fitsio
-import numpy as np
-import numpy.lib.recfunctions as rfn
 import lsst.afw.image as afwImage
 import lsst.afw.table as afwtable
+import numpy as np
+import numpy.lib.recfunctions as rfn
 from lsst.skymap.ringsSkyMap import RingsSkyMap, RingsSkyMapConfig
 from mpi4py import MPI
 

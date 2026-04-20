@@ -126,7 +126,7 @@ def main():
 
     config = FpfsForcePipeConfig()
     config.fpfs.do_noise_bias_correction = True
-    config.fpfs.use_average_psf = False
+    config.fpfs.psf_model_type = "object"
     config.fpfs.return_only_linear_modes = True
     config.fpfs.npix = 64
     config.fpfs.sigma_shapelets1 = 0.5657

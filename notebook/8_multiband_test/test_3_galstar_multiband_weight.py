@@ -1,0 +1,299 @@
+#!/usr/bin/env python3
+
+import argparse
+import os
+
+import fitsio
+
+from selection import get_cut, MAG_CUTS_MULTIBAND
+import numpy as np
+import numpy.lib.recfunctions as rfn
+import treecorr
+from mpi4py import MPI
+import healpy as hp
+
+
+# Parse command-line arguments
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Process patch masks with MPI."
+    )
+    parser.add_argument(
+        "--start", type=int, required=True, help="Start index of datalist."
+    )
+    parser.add_argument(
+        "--end", type=int, required=True, help="End index of datalist."
+    )
+    parser.add_argument(
+        "--emax", type=float, default=0.3, help="max |e| for cut."
+    )
+    parser.add_argument(
+        "--imag", type=float, default=MAG_CUTS_MULTIBAND["i"],
+        help="i-band magnitude cut",
+    )
+    parser.add_argument(
+        "--A", type=float, default=4.11, help="wopt slope",
+    )
+    parser.add_argument(
+        "--B", type=float, default=4.0, help="wopt offset",
+    )
+    return parser.parse_args()
+
+
+# Divide data among MPI ranks
+def split_work(data, size, rank):
+    return data[rank::size]
+
+def prepare_catalogs():
+    data = []
+    field_list = [
+        "spring1", "spring2", "spring3", "autumn1", "autumn2", "hectomap"
+    ]
+    for field in field_list:
+        fname = f"{os.environ['s23b_db_star']}/fields/{field}.fits"
+        data.append(fitsio.read(fname))
+    data = rfn.stack_arrays(data, usemask=False)
+    snr = data["i_psfflux_flux"] / data["i_psfflux_fluxerr"]
+    ra = data["i_ra"]
+    dec = data["i_dec"]
+    psf_mxx = data["i_hsmpsfmoments_shape11"]
+    psf_myy = data["i_hsmpsfmoments_shape22"]
+    psf_mxy = data["i_hsmpsfmoments_shape12"]
+
+    e1p2 = (psf_mxx - psf_myy) / (psf_mxx + psf_myy)
+    e2p2 = psf_mxy / (psf_mxx + psf_myy) * 2.0
+
+    star_mxx = data["i_hsmsourcemoments_shape11"]
+    star_myy = data["i_hsmsourcemoments_shape22"]
+    star_mxy = data["i_hsmsourcemoments_shape12"]
+
+    e1s2 = (star_mxx - star_myy) / (star_mxx + star_myy)
+    e2s2 = star_mxy / (star_mxx + star_myy) * 2.0
+
+    e1p4 = (
+        data["i_higherordermomentspsf_40"] -
+        data["i_higherordermomentspsf_04"]
+    )
+    e2p4 = 2.0 * (
+        data["i_higherordermomentspsf_31"] +
+        data["i_higherordermomentspsf_13"]
+    )
+
+    e1s4 = (
+        data["i_higherordermomentssource_40"] -
+        data["i_higherordermomentssource_04"]
+    )
+    e2s4 = 2.0 * (
+        data["i_higherordermomentssource_31"] +
+        data["i_higherordermomentssource_13"]
+    )
+
+    NSIDE = 1024
+    hpfname = f"{os.environ['s23b']}/fdfc_hp_window_updated.fits"
+    hmask = hp.read_map(
+        hpfname,
+        nest=True, dtype=bool,
+    )
+    pix = hp.ang2pix(
+        NSIDE,
+        np.deg2rad(90.0 - dec),
+        np.deg2rad(ra),
+        nest=True
+    )
+    msk = (
+        (~np.isnan(e1p2))
+        & (~np.isnan(e1s2))
+        & (~np.isnan(e1p4))
+        & (~np.isnan(e1s4))
+        & (~np.isnan(e2p2))
+        & (~np.isnan(e2s2))
+        & (~np.isnan(e2p4))
+        & (~np.isnan(e2s4))
+        & (data["i_calib_psf_reserved"])
+        & (snr>200.0)
+        # & hmask[pix]
+    )
+
+    ra = ra[msk]
+    dec = dec[msk]
+    e1p2 = e1p2[msk]
+    e2p2 = e2p2[msk]
+    e1p4 = e1p4[msk]
+    e2p4 = e2p4[msk]
+
+    e1s2 = e1s2[msk]
+    e2s2 = e2s2[msk]
+    e1s4 = e1s4[msk]
+    e2s4 = e2s4[msk]
+
+    catP2 = treecorr.Catalog(
+        g1=e1p2, g2=-e2p2,
+        ra=ra, dec=dec,
+        ra_units="deg",
+        dec_units="deg"
+    )
+    catQ2 = treecorr.Catalog(
+        g1=e1p2 - e1s2,
+        g2=-(e2p2 - e2s2),
+        ra=ra,
+        dec=dec,
+        ra_units="deg",
+        dec_units="deg",
+    )
+
+    catP4 = treecorr.Catalog(
+        g1=e1p4, g2=-e2p4,
+        ra=ra, dec=dec,
+        ra_units="deg",
+        dec_units="deg"
+    )
+    catQ4 = treecorr.Catalog(
+        g1=e1p4 - e1s4,
+        g2=-(e2p4 - e2s4),
+        ra=ra,
+        dec=dec,
+        ra_units="deg",
+        dec_units="deg",
+    )
+    return {
+        "P2": catP2,
+        "P4": catP4,
+        "Q2": catQ2,
+        "Q4": catQ4,
+    }
+
+def get_shape(tract_id, emax_sq, mag_cuts, A_wopt, B_wopt):
+    fname2 = f"{os.environ['s23b_anacal_v2']}/tracts_multiband/{tract_id}.fits"
+    mb = np.array(fitsio.read(fname2))
+    iband = mb
+    zbin = fitsio.read(
+        f"{os.environ['s23b_anacal_v2']}/tracts_redshift/{tract_id}.fits",
+        columns=["object_id", "zbest_0"],
+    )
+    ext = fitsio.read(
+        f"{os.environ['s23b_anacal_v2']}/tracts_extinction/{tract_id}.fits",
+    )
+
+    # Optimal weight
+    m00 = mb["m0"].astype(np.float64)
+    wopt = ( A_wopt * np.log(np.clip(m00, 1e-30, None)) + B_wopt) / 13.3
+    dwopt_dm0 = A_wopt / m00 / 13.3
+
+    NSIDE = 1024
+    hpfname = f"{os.environ['s23b']}/fdfc_hp_window_updated.fits"
+    hmask = hp.read_map(
+        hpfname,
+        nest=True, dtype=bool,
+    )
+    pix = hp.ang2pix(
+        NSIDE,
+        np.deg2rad(90.0 - iband["dec"]),
+        np.deg2rad(iband["ra"]),
+        nest=True
+    )
+    mask = get_cut(
+        mb, comp=1, dg_eff=0.0, ext=ext, zbin=zbin, zkey="zbest", emax=np.sqrt(emax_sq),
+        mag_cuts=mag_cuts,
+    ) & hmask[pix]
+    iband = iband[mask]
+    mb = mb[mask]
+    wopt = wopt[mask]
+    dwopt_dm0 = dwopt_dm0[mask]
+    if len(iband) < 2:
+        return None, None
+
+    w_total = iband["wsel"] * wopt
+    dwopt_dg1 = dwopt_dm0 * mb["dm0_dg1"]
+    dwopt_dg2 = dwopt_dm0 * mb["dm0_dg2"]
+
+    e1 = mb["e1"] * w_total
+    e2 = mb["e2"] * w_total
+
+    r1 = (
+        mb["de1_dg1"] * w_total
+        + iband["dwsel_dg1"] * wopt * mb["e1"]
+        + iband["wsel"] * dwopt_dg1 * mb["e1"]
+    )
+    r2 = (
+        mb["de2_dg2"] * w_total
+        + iband["dwsel_dg2"] * wopt * mb["e2"]
+        + iband["wsel"] * dwopt_dg2 * mb["e2"]
+    )
+    response = (r1 + r2) / 2.0
+    cate = treecorr.Catalog(
+        g1=e1,
+        g2=-e2,
+        ra=iband["ra"],
+        dec=iband["dec"],
+        ra_units="deg",
+        dec_units="deg",
+    )
+    catk = treecorr.Catalog(
+        k=response,
+        ra=iband["ra"],
+        dec=iband["dec"],
+        ra_units="deg",
+        dec_units="deg",
+    )
+    return cate, catk
+
+def process_tract(tract_id, emax_sq, mag_cuts, A_wopt, B_wopt):
+    cate, catk = get_shape(tract_id, emax_sq, mag_cuts, A_wopt, B_wopt)
+    if cate is None:
+        return None
+    nbins = 12
+    catalogs = prepare_catalogs()
+    dd =[]
+    for kk in ["P2", "P4", "Q2", "Q4"]:
+        cor1 = treecorr.GGCorrelation(
+            nbins=nbins, min_sep=0.25, max_sep=360.0, sep_units="arcmin"
+        )
+        cor2 = treecorr.NKCorrelation(
+            nbins=nbins, min_sep=0.25, max_sep=360.0, sep_units="arcmin"
+        )
+        cor1.process(catalogs[kk], cate)
+        dd.append(cor1.xip * cor1.npairs)
+        if kk =="Q4":
+            cor2.process(catalogs[kk], catk)
+            dd.append(cor2.xi * cor1.npairs)
+    return np.stack(dd)
+
+
+def main():
+    args = parse_args()
+    mag_cuts_local = dict(MAG_CUTS_MULTIBAND)
+    mag_cuts_local["i"] = args.imag
+
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    size = comm.Get_size()
+
+    if rank == 0:
+        full = fitsio.read(
+            f"{os.environ['s23b']}/tracts_id_v2.fits"
+        )
+        selected = full[args.start: args.end]
+    else:
+        selected = None
+
+    selected = comm.bcast(selected, root=0)
+    my_entries = split_work(selected, size, rank)
+    outcome = []
+    for tract_id in my_entries:
+        tout = process_tract(tract_id, args.emax ** 2, mag_cuts_local, args.A, args.B)
+        if tout is not None:
+            outcome.append(tout)
+
+    gathered_results = comm.gather(outcome, root=0)
+    if rank == 0:
+        flat = [arr for sublist in gathered_results for arr in sublist]
+        gathered = np.stack(flat)
+        outdir = f"{os.environ['s23b_anacal_v2']}/tests_multiband_weight/imag{args.imag:.1f}_emax{args.emax:.2f}"
+        os.makedirs(outdir, exist_ok=True)
+        fitsio.write(f"{outdir}/psfstar.fits", gathered)
+    comm.Barrier()
+    return
+
+
+if __name__ == "__main__":
+    main()

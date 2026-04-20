@@ -2,7 +2,7 @@
 
 # ---------------- PBS wrapper config ----------------
 server="gfarm"
-Nodes="nodes=ansys28-ib:ppn=20+ansys02-ib:ppn=20+ansys03-ib:ppn=20+ansys05-ib:ppn=20+ansys06-ib:ppn=20+ansys07-ib:ppn=20+ansys09-ib:ppn=20+ansys10-ib:ppn=20+ansys11-ib:ppn=20+ansys12-ib:ppn=20+ansys13-ib:ppn=20+ansys15-ib:ppn=20+ansys16-ib:ppn=20+ansys17-ib:ppn=20+ansys18-ib:ppn=20+ansys19-ib:ppn=20+ansys20-ib:ppn=20+ansys25-ib:ppn=20+ansys26-ib:ppn=20+ansys27-ib:ppn=20"
+Nodes="nodes=ansys06-ib:ppn=20+ansys07-ib:ppn=20+ansys10-ib:ppn=20+ansys11-ib:ppn=20+ansys26-ib:ppn=20+ansys27-ib:ppn=20+ansys28-ib:ppn=20+ansys30-ib:ppn=20+ansys31-ib:ppn=20+ansys42-ib:ppn=20+ansys53-ib:ppn=20+ansys55-ib:ppn=20+ansys59-ib:ppn=20+ansys60-ib:ppn=20"
 
 # ------------- Function: submit one PBS job ---------
 submit_qsub() {
@@ -26,7 +26,7 @@ submit_qsub() {
 #!/usr/bin/env bash
 source /gpfs02/work/xiangchong.li/ana/setupIm.sh
 cd "$PWD"
-mpirun -np 400 $CMD
+mpirun -np 280 $CMD
 EOF
 }
 
@@ -55,6 +55,6 @@ RANGES=(
 for range in "${RANGES[@]}"; do
     read -r START END <<< "$range"
     echo "Submitting $SCRIPT from $START to $END"
-    submit_qsub python "$SCRIPT" --start "$START" --end "$END"
+    submit_qsub python "$SCRIPT" --start "$START" --end "$END" --band z
     sleep 1.5
 done

@@ -27,7 +27,7 @@ def split_work(data, size, rank):
     return data[rank::size]
 
 
-def process_tract(tract_id, skymap, patch_list):
+def process_tract(tract_id, skymap, patch_list, field):
     fname = os.path.join(
         os.environ["s23b"], "db_star", f"{tract_id}.fits"
     )
@@ -37,7 +37,7 @@ def process_tract(tract_id, skymap, patch_list):
         data[mask]
     )
     out_fname = os.path.join(
-        os.environ["s23b"], "db_star", "fields", f"tmp_{tract_id}.fits"
+        os.environ["s23b"], "db_star", "fields", f"{field}_{tract_id}.fits"
     )
     fitsio.write(out_fname, data)
     # tract_info = skymap[tract_id]
@@ -83,7 +83,7 @@ def main():
     pbar = tqdm(total=len(tract_list), desc=f"Rank {rank}", position=rank)
     for tract_id in tract_list:
         patch_list = full["patch"][full["tract"] == tract_id]
-        process_tract(tract_id, skymap, patch_list)
+        process_tract(tract_id, skymap, patch_list, args.field)
         gc.collect()
         pbar.update(1)
     pbar.close()
@@ -95,7 +95,7 @@ def main():
             os.environ["s23b"], "db_star",
         )
         d_all = []
-        fnames = glob.glob(os.path.join(out_dir, "fields", "tmp_*.fits"))
+        fnames = glob.glob(os.path.join(out_dir, "fields", f"{field}_*.fits"))
         for fn in fnames:
             if os.path.isfile(fn):
                 d_all.append(

@@ -14,6 +14,10 @@ def parse_args():
     parser.add_argument(
         "--field", type=str, default="all", required=False, help="field name"
     )
+    parser.add_argument(
+        "--suffix", type=str, default="", required=False,
+        help="suffix for input/output, e.g. '_multiband' or '_multiband2'",
+    )
     return parser.parse_args()
 
 def select_data(d, sel):
@@ -26,10 +30,11 @@ def select_data(d, sel):
 def main():
     args = parse_args()
     field = args.field
+    suffix = args.suffix
     rootdir = os.environ['s23b_anacal_v2']
-    outdir = f"{rootdir}/tracts/"
+    outdir = f"{rootdir}/tracts{suffix}/"
     os.makedirs(outdir, exist_ok=True)
-    fname = f"{rootdir}/fields/{field}.fits"
+    fname = f"{rootdir}/fields/{field}{suffix}.fits"
     data = fitsio.read(fname)
 
     outdir2 = f"{rootdir}/tracts_color/"
